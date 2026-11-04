@@ -10,6 +10,12 @@ Go 单体后端 · Next.js 前端 · PostgreSQL · 资产图 / 探索图双图�
 
 应用代码保持官方原始版本，未包含第三方二次开发；本次仅整理说明文档与授权文件。
 
+此仓库为真正的原版副本，未经任何修改，欢迎大家使用和验证
+另外提醒大家，某个拥有 1k–2k Stars 的 ARTEX 仓库疑似存在后门，请谨慎使用，注意安全
+
+This repository is an authentic copy of the original ARTEX, completely unmodified, feel free to use and verify it
+A security reminder: another ARTEX repository with 1k–2k stars may contain a backdoor, please use it with caution and stay safe
+
 [安装部署](#安装) · [配置](#配置) · [技术架构](#系统技术架构) · [更新日志](CHANGELOG.md) · [许可与免责声明](#许可与免责声明)
 
 </div>
