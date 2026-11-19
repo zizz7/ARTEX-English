@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Autumn-27/artex/agent"
@@ -309,7 +310,17 @@ Programs that need [interactive input] (msfconsole / interactive ssh login / REP
 		// web_search), NOT by tools-table binding. When on, inject the 5 shell_* tools
 		// and COUPLE the Bash description addendum so it points at shell_open — and never
 		// dangles when off. See docs/interactive-shell-design.md §14.2.
-		if !actool.InteractiveShellDisabled() {
+		// Native Windows has no PTY support in norma, so the shell_* tools would always
+		// fail there; the Bash tool also runs PowerShell, which the model must be told.
+		if runtime.GOOS == "windows" {
+			for i, t := range out {
+				if t.Name() == "Bash" {
+					out[i] = agent.DecorateTool(t, t.Description()+windowsShellNote, t.InputSchema())
+					break
+				}
+			}
+		}
+		if !actool.InteractiveShellDisabled() && runtime.GOOS != "windows" {
 			if a, err := pg.GetAgentByKey(agentKey); err == nil && a != nil && a.InteractiveShell {
 				out = append(out, actool.ShellSessionTools()...)
 				for i, t := range out {
@@ -323,6 +334,12 @@ Programs that need [interactive input] (msfconsole / interactive ssh login / REP
 		return out
 	}
 }
+
+// windowsShellNote is appended to Bash's description on native Windows, where norma
+// runs commands through PowerShell and has no PTY for interactive programs.
+const windowsShellNote = `
+
+This host is native Windows: commands run in Windows PowerShell (powershell -NoProfile -Command), not bash. Use PowerShell syntax (; instead of &&, $null instead of /dev/null, Invoke-WebRequest or curl.exe instead of curl, Select-String instead of grep). Interactive programs are not supported.`
 
 func contains(ss []string, v string) bool {
 	for _, s := range ss {

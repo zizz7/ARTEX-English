@@ -3500,7 +3500,25 @@ func (s *Server) getReport(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 404, "no active task")
 		return
 	}
-	findings, _ := t.Store.ListByKind(db.KindFinding, 1000) // pure vulnerabilities (facts are a separate KindFact and do not enter the report)
+	all, _ := t.Store.ListByKind(db.KindFinding, 1000) // pure vulnerabilities (facts are a separate KindFact and do not enter the report)
+	// Triage decides what the client sees: false positives, duplicates and ignored
+	// findings are left out; other statuses are shown next to each finding.
+	tid, _ := strconv.ParseInt(t.ID, 10, 64)
+	meta, _ := s.m.pg.FindingMetaByNodeID(tid)
+	details, _ := s.m.pg.FindingReportsByNodeID(tid)
+	findings := make([]*db.Node, 0, len(all))
+	status := map[int64]string{}
+	excluded := 0
+	for _, n := range all {
+		st := meta[n.ID].Status
+		switch st {
+		case db.FindingFalsePositive, db.FindingDuplicate, db.FindingIgnored:
+			excluded++
+			continue
+		}
+		status[n.ID] = st
+		findings = append(findings, n)
+	}
 	counts := map[string]int{}
 	for _, ty := range []string{"root_domain", "ip", "subdomain", "app", "service", "endpoint"} {
 		ns, _ := s.m.Assets().QueryByType(ty, 100000, 0)
@@ -3511,6 +3529,7 @@ func (s *Server) getReport(w http.ResponseWriter, r *http.Request) {
 	md := report.Markdown(report.Input{
 		Title: t.Description, Goal: t.Goal, GeneratedAt: time.Now(),
 		AssetCounts: counts, Findings: findings,
+		Status: status, Details: details, Excluded: excluded,
 	})
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(200)

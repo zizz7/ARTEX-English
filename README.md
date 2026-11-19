@@ -8,19 +8,15 @@ Go monolithic backend · Next.js frontend · PostgreSQL · Asset Graph / Explora
 
 **Version baseline: official ARTEX 0.3.7 release line (0.3.7 released on 2026-08-31)**
 
-[Installation](#installation) · [Configuration](#configuration) · [Technical Architecture](#system-technical-architecture) · [Changelog](CHANGELOG.md) · [License and Disclaimer](#license-and-disclaimer)
+[What this fork changes](#what-this-fork-changes) · [Choosing an environment](#choosing-an-environment) · [Installation](#installation) · [HexBrain and HexStrike](#optional-integrations-hexbrain-and-hexstrike) · [Tuning](#tuning-for-deeper-runs) · [Architecture](#system-technical-architecture) · [Changelog](CHANGELOG.md) · [License](#license-and-disclaimer)
 
 </div>
 
 ---
 
-> **English translation fork**: This repository is an English translation of [Core-RCE/ARTEX-original-version](https://github.com/Core-RCE/ARTEX-original-version), translated on 2026-11-19. It differs from upstream only as follows:
+> **About this fork**: This repository is an English edition of [Core-RCE/ARTEX-original-version](https://github.com/Core-RCE/ARTEX-original-version). It translates the whole platform to English (2026-11-19) and then adds result-quality, safety, and deployment improvements, listed in [What this fork changes](#what-this-fork-changes) and in the [CHANGELOG](CHANGELOG.md). Chinese is kept only where code matches against it: quota-error phrases returned by Chinese LLM providers, ICP filing-number parsing, CJK test fixtures, and references to Chinese-named doc files.
 >
-> - All Chinese text has been translated to English: UI labels and messages, LLM agent prompts and tool descriptions, log and error messages, code comments, documentation, scripts, and config comments.
-> - Chinese is deliberately kept where the code matches against it: quota-error phrases returned by Chinese LLM providers, ICP filing-number parsing, CJK test fixtures, and references to Chinese-named doc files.
-> - The frontend parsers for intercept messages match the English backend wording and still accept the old `[模型]` prefix, so records from existing databases display correctly.
->
-> There are no other functional changes. The built-in intercept rules are seeded by name, so a database created by the Chinese version ends up with both the old Chinese rules and the new English ones; new installs are unaffected.
+> The published `autumn27/artex` Docker image is the upstream Chinese build. To run this fork in Docker, build the image from this repository with `scripts/build-image.sh` (see [Installation](#installation)).
 >
 > **Version note**: The current checkout is `v0.3.7-10-gdc46457`, i.e. 10 official upstream commits after the `v0.3.7` tag. It is not a byte-for-byte identical snapshot of the `v0.3.7` tag.
 >
@@ -59,6 +55,54 @@ Go monolithic backend · Next.js frontend · PostgreSQL · Asset Graph / Explora
 
 ---
 
+## What this fork changes
+
+Everything below is on top of the upstream code. None of it weakens scope handling, the command intercept rules, or the approval flow.
+
+### Fewer false positives, more verified findings
+
+- **Evidence is required to report a vulnerability.** `report_finding` now rejects a finding with no reproducible evidence (the exact request or command plus the output line that proves it) and tells the agent to record an unverified suspicion as a fact instead. Previously an LLM guess was stored as "confirmed".
+- **Severity is validated.** Values are normalized to `critical / high / medium / low`; anything else is rejected instead of silently falling out of the severity counts.
+- **Duplicate findings are refused.** Re-reporting the same vulnerability class and name on exactly the same assets returns the existing finding instead of creating another row. Different parameters or endpoints stay separate findings.
+- **High-impact findings get an independent re-test.** Before a critical or high finding closes a goal, the planner dispatches one verification intent that reproduces it from a fresh session, ideally with a different tool, unless the evidence is unambiguous on its own (a captured flag, output from achieved code execution).
+- **A tool failure is no longer a negative result.** Workers retry a failed, missing, or rate-limited tool once with adjusted options or an equivalent tool, and otherwise record the surface as *untested*, so the planner does not treat it as clean.
+- **The client report respects triage.** Findings marked false positive, duplicate, or ignored are left out; the report adds per-severity counts, each finding's review status, and the reporter agent's detailed write-up.
+
+### Longer, steadier runs
+
+- The end-of-round prompt no longer contradicts the "never stall" rule, which could leave a task idle until the next heartbeat.
+- The planner sees the last 30 finished intents (was 15), so long tasks stop re-dispatching work that scrolled out of view.
+- New installs give each worker run 30 minutes (was 20), so deep exploitation chains are cut off less often.
+
+### New testing skills
+
+Shipped and enabled for the `worker`, `pentest`, and `auto` agents: `access-control-idor`, `auth-session-testing`, `ssrf-testing`, `file-upload-testing`, `subdomain-takeover-cloud`. Each is verification-first, non-destructive, and ends with an evidence checklist and common false positives. `hexbrain-research` ships disabled; see [HexBrain](#hexbrain-recommended-optional-research-only).
+
+### Safety and correctness
+
+- **Intercept rules now cover MCP tools.** Previously only built-in tools (Bash, WebFetch, file edits) were checked, so a command run through an MCP server bypassed every deny rule. `mcp__*` is now on by default; use `mcp__<server>__*` for a single server.
+- **MCP calls**: long remote scans get 15 minutes (the old fixed limit was 120 seconds), and output is capped at 40 KB so one result cannot flood the model's context.
+- **Docker publishes ports on localhost only by default** (`ARTEX_BIND`), because the first visitor to a fresh install sets the admin password and port 8788 is a recording proxy.
+- **The login signing key survives container rebuilds** (`-keydir` / `ARTEX_KEY_DIR`), so updates no longer log everyone out.
+- **Native Windows**: interactive-shell tools (which cannot work there) are no longer offered, and agents are told their shell is PowerShell.
+- **Upgrades from the Chinese release** switch built-in prompts and tool descriptions that are still in Chinese to the English defaults. Previous prompt versions stay in each agent's prompt history.
+
+---
+
+## Choosing an environment
+
+ARTEX's agents do their work by running security tools in a shell, so the environment matters more than for most web apps.
+
+| Environment | Verdict | Why |
+| --- | --- | --- |
+| **Docker, Kali image** (`artex:kali`) | **Recommended** | Isolated from your host, reproducible, and ships nmap, masscan, nuclei, httpx, subfinder, ffuf, feroxbuster, gobuster, sqlmap, nikto, whatweb, wafw00f, hydra, SecLists, and searchsploit. |
+| **Kali Linux, native** | Recommended for a dedicated VM | All tools at full speed, raw-socket scans without container networking, and stdio MCP servers such as HexStrike run alongside ARTEX. Use a VM you can reset. |
+| Docker, slim image (`artex:local`) | Fine for recon-only use | Small image with nmap, curl, dig, and Playwright; agents must install anything else themselves. |
+| Windows via **WSL2** | Good on a Windows workstation | Run the Kali Docker image with Docker Desktop's WSL2 backend, or install Kali in WSL2 and follow the native steps. |
+| Windows, native | Not recommended | Commands run through PowerShell, interactive shells are unavailable, most tools are missing, and the helper scripts are bash-only. |
+
+---
+
 ## Asset Sync (ScopeSentry)
 
 Asset data can be synced directly from [ScopeSentry](https://github.com/Autumn-27/ScopeSentry), saving you from collecting it again:
@@ -71,125 +115,89 @@ Asset data can be synced directly from [ScopeSentry](https://github.com/Autumn-2
 
 ## Installation
 
-> Requires a **PostgreSQL** database; exploration requires an **LLM** to be configured (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, which can also be set in the UI).
+> Requires **PostgreSQL 16** and an **LLM** (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, or configure a profile in the UI). Only test systems you are authorized to test.
 
-### Method 1: One-click install script (recommended)
+### Method 1: Docker with the Kali toolset (recommended)
 
 ```bash
-git clone https://github.com/Autumn-27/ARTEX.git
-cd ARTEX
-./install.sh
+git clone https://github.com/zizz7/ARTEX-English.git
+cd ARTEX-English
+cp .env.example .env                  # set POSTGRES_PASSWORD (and optionally an API key)
+scripts/build-image.sh kali           # builds artex:kali from this repo
+docker compose -f docker-compose.yml -f docker-compose.kali.yml up -d
+# → http://127.0.0.1:8787  (first visit: /setup to set the admin password)
 ```
 
-The script will: detect / automatically install Docker → let you choose **① All Docker** or **② Local build and run**:
+`build-image.sh` compiles the web UI and the Go binary on your machine when Node 20+ and Go 1.26+ are installed, and otherwise inside the official `node` and `golang` containers, so Docker alone is enough. The Kali image is large (about 4 GB) because it includes the toolset and SecLists. `kalilinux/kali-rolling` is not pinned, so two builds on different days can differ.
 
-- **① All Docker**: enter a Postgres password (press Enter for a random one) → automatically writes `.env` → `docker compose up -d`.
-- **② Local run**: choose a database (connect to an existing one / start one with Docker) → generates `config.json` → compiles the embedded single binary with `go` → starts it.
+Or run `./install.sh`, choose **① All Docker**, and set `ARTEX_FLAVOR=kali` first to get the Kali image (`ARTEX_FLAVOR=kali ./install.sh`).
 
-Once installed, open **http://localhost:8787** (on first visit, go to `/setup` to set the administrator password).
-
-### Method 2: Docker Compose (manual)
+### Method 2: Docker, slim image
 
 ```bash
-git clone https://github.com/Autumn-27/ARTEX.git
-cd ARTEX
-cp .env.example .env          # Fill in POSTGRES_PASSWORD, optionally ANTHROPIC_API_KEY
-docker compose up -d          # Pulls the autumn27/artex image + postgres
-# → http://localhost:8787
+cp .env.example .env
+scripts/build-image.sh                # builds artex:local (Dockerfile)
+docker compose up -d
 ```
 
-The image already includes common tools (ripgrep/curl/vim/npm/nmap…); `./skills` and `./data` are persisted via bind mounts.
+The slim image has ripgrep, curl, nmap, dig, netcat, whois, Node, and Playwright with Chromium.
 
-### Method 3: Download the prebuilt binary (Releases)
+**Both Docker methods**: the UI (8787) and the recording proxy (8788) are published on `127.0.0.1` only. Set `ARTEX_BIND=0.0.0.0` in `.env` only behind a firewall or a TLS reverse proxy, because the first visitor to a fresh install sets the admin password. `./data`, `./keys`, and `./skills` are bind-mounted and survive rebuilds.
 
-Download the zip for your platform from [Releases](https://github.com/Autumn-27/ARTEX/releases). After extraction you get `artex` + `skills/` + `config.example.json`:
-
-```bash
-cp config.example.json config.json   # Fill in the database connection
-./artex                              # → http://localhost:8787
-```
-
-### Method 4: Build the single binary from source
+### Method 3: Kali Linux, native (systemd)
 
 ```bash
-# 1) Static export of the frontend
+git clone https://github.com/zizz7/ARTEX-English.git
+cd ARTEX-English
+# build the single binary (needs Go 1.26+ and Node 20+)
 cd web && npm ci && npm run build:static && cd ..
-# 2) Copy into the embed directory
-cp -r web/out server/webui/dist
-# 3) Compile (the frontend is only embedded with -tags embedui)
+rm -rf server/webui/dist && cp -r web/out server/webui/dist
 CGO_ENABLED=0 go build -tags embedui -o artex ./cmd/artex
-./artex
+sudo scripts/install-kali.sh          # apt toolset + PostgreSQL + config.json + systemd unit
+sudo systemctl enable --now artex
+# → http://127.0.0.1:8787  (remote: ssh -L 8787:127.0.0.1:8787 user@kali-host)
 ```
 
-### Method 5: Build cross-platform Release archives
+`install-kali.sh` installs the same toolset as the Kali image plus PostgreSQL. It creates an `artex` database role with a random password and writes `/opt/artex/config.json` (mode 600). It also installs `deploy/artex.service`, which runs ARTEX as a dedicated `artex` user, bound to localhost, with the `CAP_NET_RAW`/`CAP_NET_ADMIN` capabilities that nmap and masscan need for raw scans. If you run it again, it keeps an existing `config.json`.
 
-`build.sh` first builds and embeds the frontend, then uses the Go linker to strip debug information and packages the release files into zip archives. In Release mode, it generates zip packages for Linux amd64/arm64, macOS amd64/arm64, and Windows amd64 by default:
+### Method 4: Windows
+
+Use **WSL2**. Either install Docker Desktop with the WSL2 backend and follow Method 1, or install Kali from the Microsoft Store (`wsl --install -d kali-linux`) and follow Method 3 inside it. WSL2 forwards `localhost`, so the UI opens in your Windows browser.
+
+Native Windows works only for light use. Commands run through PowerShell, interactive shells are unavailable, and you must install the tools yourself.
+
+### Method 5: Build from source / development
 
 ```bash
-./build.sh --release
-# Output: dist/artex-0.3.3-*.zip
+cd web && npm ci && npm run build:static && cd ..
+rm -rf server/webui/dist && cp -r web/out server/webui/dist
+CGO_ENABLED=0 go build -tags embedui -o artex ./cmd/artex
+./artex -addr 127.0.0.1:8787 -proxy 127.0.0.1:8788
 ```
 
-UPX self-extracting binaries may be incompatible with some Linux kernels, virtualization environments, or security policies, so they are disabled by default. Use `ARTEX_TARGETS` to customize targets; once you have confirmed that the target runtime environment is compatible, you can explicitly pass `--upx` to shrink the binary further:
-
-```bash
-ARTEX_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
-./build.sh --target linux/amd64 --upx
-```
+`./build.sh --release` builds zip archives for Linux, macOS, and Windows (see `./build.sh --help`).
 
 ---
 
 ## Updating and Upgrading
 
-> An upgrade only replaces the program and leaves your data untouched: the Postgres data volume `pgdata`, `./data` (jwt.key / SQLite, etc.), and `./skills` are all preserved. **No manual database migration is needed**: on every startup, `artex` idempotently re-runs `schema.sql` (including `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`), i.e. "restart to migrate". It is still recommended to back up `./data` and the database before upgrading.
-
-### Method 1: One-click update script (recommended)
-
-```bash
-cd ARTEX
-./update.sh
-```
-
-The script first optionally runs `git pull` to fetch the latest code, then lets you choose **① Docker update** or **② Local build update** (corresponding to `install.sh`):
-
-- **① Docker**: you can specify a target image tag (press Enter to keep `ARTEX_TAG` from `.env`, defaulting to `latest`) → `docker compose pull` → `docker compose up -d` (restarting with the new image migrates automatically).
-- **② Local**: rebuild the frontend static output → recompile `./artex` (restart the process afterwards for it to take effect).
-
-### Method 2: Docker Compose (manual)
-
-```bash
-cd ARTEX
-git pull                       # Update compose / scripts (optional)
-# To pin a version: set ARTEX_TAG=v0.2.0 in .env; if unset, latest is used
-docker compose pull artex
-docker compose up -d artex     # Restart with the new image → schema migrates automatically
-docker image prune -f          # Clean up old images (optional)
-```
-
-### Method 3: Prebuilt binary (Releases)
-
-Download the new version's zip from [Releases](https://github.com/Autumn-27/ARTEX/releases), stop the old process, then overwrite `artex` and `skills/` (keeping your `config.json` and `data/`) and restart:
-
-```bash
-cp -r <extracted-dir>/skills ./ && cp <extracted-dir>/artex ./
-./artex
-```
-
-### Method 4: Build from source
+> An upgrade only replaces the program; your data stays. The Postgres volume `pgdata`, `./data`, `./keys`, and `./skills` are preserved. **No manual database migration is needed**: on every startup `artex` idempotently re-applies `schema.sql` and runs one-time migrations. It is still wise to back up `./data` and the database first.
 
 ```bash
 git pull
-cd web && npm ci && npm run build:static && cd ..
-cp -r web/out server/webui/dist
-CGO_ENABLED=0 go build -tags embedui -o artex ./cmd/artex
-# Restart ./artex
+./update.sh                              # ① Docker: rebuilds the image from the new code and recreates artex
+ARTEX_FLAVOR=kali ./update.sh            # same, for the Kali image
 ```
+
+For a native install, rebuild the binary (Method 3 or 5), then `sudo install -o artex -g artex -m 755 artex /opt/artex/artex && sudo systemctl restart artex`.
+
+**Upgrading from the upstream Chinese release**: on first start, built-in agent prompts and tool descriptions that are still in Chinese are switched to the English defaults. The old prompt versions stay in each agent's prompt history (Agents page). The built-in intercept rules are seeded by name, so an old database keeps the Chinese-named rules next to the new English ones; delete whichever set you don't want on the Intercept Rules page.
 
 ---
 
 ## Configuration
 
-**Database** (`config.json`, or override with the environment variable `ARTEX_PG_DSN`):
+**Database** (`config.json`, or the `ARTEX_PG_DSN` environment variable, which takes priority):
 
 ```json
 {
@@ -201,16 +209,60 @@ CGO_ENABLED=0 go build -tags embedui -o artex ./cmd/artex
 }
 ```
 
-**LLM**: `export ANTHROPIC_API_KEY=sk-...` (or `OPENAI_API_KEY`); it can also be entered on the "LLM Configuration" page in the UI.
+**LLM**: `export ANTHROPIC_API_KEY=sk-...` (or `OPENAI_API_KEY`), or add a profile on the LLM page.
 Optional: `ARTEX_LLM_PROVIDER` / `ARTEX_LLM_MODEL` / `ARTEX_LLM_BASE_URL` / `ARTEX_LLM_PROXY`.
 
-**Concurrency**: The number of work agents per task is configured under "System Settings" (default 3).
+**Flags and environment**:
 
-**Common flags**: `./artex -addr :8787 -proxy :8788` (`-addr` is frontend + API, `-proxy` is the traffic recording proxy).
+| Flag / variable | Default | Purpose |
+| --- | --- | --- |
+| `-addr` | `:8787` | UI + API listen address (use `127.0.0.1:8787` outside Docker) |
+| `-proxy` | `:8788` | Traffic recording proxy (empty disables it) |
+| `-data` | `data/` next to the binary | Workspace and traffic index |
+| `-keydir` / `ARTEX_KEY_DIR` | next to the binary | JWT signing key; keep it outside `-data` so the file manager can never serve it |
+| `ARTEX_BIND` (compose) | `127.0.0.1` | Interface Docker publishes 8787/8788 on |
+| `ARTEX_IMAGE` (compose) | `artex:local` | Image the `artex` service runs |
 
 ---
 
+## Optional integrations: HexBrain and HexStrike
 
+ARTEX can use external MCP servers (System → MCP; `stdio` and Streamable `http` transports). Here is a straight assessment of two that come up often.
+
+### HexBrain (recommended, optional, research only)
+
+HexBrain is a hosted, read-only MCP that returns publicly disclosed HackerOne reports, payload references, testing playbooks, and CVE checks. It fits ARTEX well because it improves planning without executing anything.
+
+- **Benefits**: better test ideas per technology and bug class, payloads with known track records, a "was this accepted before?" check before reporting, and CVE leads once the stack is fingerprinted.
+- **Costs**: every query leaves your machine. Do not send client-confidential details (internal hostnames, credentials, unreleased product names); query by technology and bug class. Report text is third-party content that reaches the model, which is a prompt-injection surface. A CVE match is a lead, not a finding.
+- **Setup**: add an MCP server named exactly `hexbrain` (transport `http`, the URL and `Authorization` header from your HexBrain account). Then make the `hexbrain-research` skill visible to the `worker` and `pentest` agents. The skill declares `mcps: hexbrain`, so the tools only appear once the skill is loaded, and it tells the agent how to use them safely.
+
+### HexStrike AI (not bundled; connect only if you need it)
+
+[HexStrike AI](https://github.com/0x4m4/hexstrike-ai) wraps about 150 offensive tools behind its own API server (port 8888 by default), which runs the tools itself and includes an endpoint that executes arbitrary commands. Its README describes no authentication and suggests adding it for production deployments. It was also widely reported in September 2025 as being used by criminals to speed up exploitation of Citrix NetScaler flaws.
+
+ARTEX already runs real tools through its own shell, where commands are recorded, routed through the traffic proxy, and checked by the intercept rules. HexStrike mostly duplicates that, and its tools run outside ARTEX's traffic recording and workspace. **Recommendation: use the Kali image or a native Kali install instead of HexStrike.** If you still want it:
+
+1. Run `hexstrike_server.py` on the same machine, bound to localhost (firewall port 8888 from everything else).
+2. Add an MCP server named `hexstrike` with transport `stdio` and the command `python3 /path/to/hexstrike_mcp.py --server http://127.0.0.1:8888`. The stdio client must run where ARTEX runs, which is easiest on a native Kali install.
+3. Keep `mcp__*` (or `mcp__hexstrike__*`) in the intercept tool list (the default), so the deny rules also check HexStrike's tool arguments. Consider enabling the LLM fallback judge for unmatched calls.
+4. Make it visible to the `worker` agent only.
+
+---
+
+## Tuning for deeper runs
+
+| Setting | Where | Effect |
+| --- | --- | --- |
+| Workers per task (default 3) | System Settings | More parallel exploration; raise it only if your LLM rate limits allow |
+| Worker run budget (30 min on new installs) | Agents → worker | Longer single-intent exploitation chains |
+| LLM failover | LLM page | Without a second profile, a long run stops on the first quota or billing error |
+| Installed tools | Tools → add a `shell` tool | Lists extra CLI tools in Bash's description so agents know they exist |
+| LLM fallback judge | Intercept Rules | Reviews tool calls that match no rule; costs one LLM call per such call |
+
+Improvements in this fork were verified by building and testing the code (the Go test suite against a real PostgreSQL, the frontend type check, and a startup smoke test of the Kali image). They have not been benchmarked on live targets, so measure on your own authorized lab before relying on comparative claims.
+
+---
 
 ## Development
 

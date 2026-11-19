@@ -1526,10 +1526,10 @@ func skillRelPath(file string) (string, string) {
 	if strings.HasPrefix(file, "/") || strings.Contains(file, "//") {
 		return "", "invalid path: must be relative with no empty segments"
 	}
-	// 4. Normalize and final safety re-check after Clean.
-	//    filepath.Clean removes redundant separators and resolves single dots.
-	clean := filepath.Clean(file)
-	if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
+	// 4. Normalize and final safety re-check after Clean. path.Clean (not filepath)
+	//    keeps the slash form on every OS; callers convert via filepath.Join.
+	clean := path.Clean(file)
+	if clean == "." || path.IsAbs(clean) || filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
 		return "", "invalid path"
 	}
 	return clean, ""

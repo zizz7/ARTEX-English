@@ -46,6 +46,7 @@ func main() {
 		addr    = flag.String("addr", ":8787", "HTTP listen address")
 		dataDir = flag.String("data", filepath.Join(config.BaseDir(), "data"), "data directory for SQLite stores (default: data/ next to the executable)")
 		proxy   = flag.String("proxy", ":8788", "traffic recording proxy address (empty to disable)")
+		keyDir  = flag.String("keydir", defaultKeyDir(), "directory for the JWT signing key; keep it outside -data so the file manager can never serve it (default: $ARTEX_KEY_DIR, else next to the executable)")
 	)
 	flag.Parse()
 
@@ -87,7 +88,10 @@ func main() {
 		skillDir = abs
 	}
 	log.Printf("[config] skill directory: %s", skillDir)
-	srv := server.New(ctx, mgr, skillDir, *dataDir, config.BaseDir())
+	if err := os.MkdirAll(*keyDir, 0o700); err != nil {
+		log.Fatalf("create key dir %s: %v", *keyDir, err)
+	}
+	srv := server.New(ctx, mgr, skillDir, *dataDir, *keyDir)
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           srv.Handler(),
@@ -106,6 +110,15 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+// defaultKeyDir is $ARTEX_KEY_DIR when set (Docker mounts a volume there so the key
+// survives container recreation), otherwise the executable's directory.
+func defaultKeyDir() string {
+	if d := os.Getenv("ARTEX_KEY_DIR"); d != "" {
+		return d
+	}
+	return config.BaseDir()
 }
 
 // shutdownContext deliberately does not derive from signalCtx. If it did, the

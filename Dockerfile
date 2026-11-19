@@ -34,8 +34,9 @@ WORKDIR /app
 COPY dist/${TARGETARCH}/artex /app/artex
 RUN chmod +x /app/artex
 COPY skills/ /app/skills/
-# data/ (SQLite + jwt.key) persistence point
-VOLUME ["/app/data"]
+# data/ = workspace + traffic index; keys/ = JWT signing key (kept out of the browsable workspace)
+ENV ARTEX_KEY_DIR=/app/keys
+VOLUME ["/app/data", "/app/keys"]
 EXPOSE 8787 8788
 ENTRYPOINT ["/app/artex"]
 CMD ["-addr", ":8787", "-proxy", ":8788"]

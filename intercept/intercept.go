@@ -143,6 +143,10 @@ var defaultEnabledTools = []string{
 	"Bash", "WebFetch", "web_search",
 	"shell_open", "shell_send",
 	"Write", "Edit", "MultiEdit",
+	// MCP tools run outside ARTEX's own shell (often on another host), so without this
+	// the deny rules never see e.g. a remote execute_command. Only rules apply here; the
+	// LLM judge still runs only if it is enabled.
+	MCPWildcard,
 }
 
 // New creates an Interceptor backed by d. The rule cache is lazy-loaded on
@@ -232,7 +236,7 @@ func (i *Interceptor) rules() ([]compiledRule, error) {
 func (i *Interceptor) IsToolEnabled(name string) bool {
 	i.mu.RLock()
 	if i.enabledTools != nil {
-		v := i.enabledTools[name]
+		v := toolEnabledIn(i.enabledTools, name)
 		i.mu.RUnlock()
 		return v
 	}
@@ -243,7 +247,28 @@ func (i *Interceptor) IsToolEnabled(name string) bool {
 	if i.enabledTools == nil {
 		_ = i.loadLocked()
 	}
-	return i.enabledTools[name]
+	return toolEnabledIn(i.enabledTools, name)
+}
+
+// MCPWildcard enables interception for every MCP tool. "mcp__<server>__*" enables
+// one server's tools. MCP tools are named mcp__<server>__<tool>.
+const MCPWildcard = "mcp__*"
+
+func toolEnabledIn(set map[string]bool, name string) bool {
+	if set[name] {
+		return true
+	}
+	if !strings.HasPrefix(name, "mcp__") {
+		return false
+	}
+	if set[MCPWildcard] {
+		return true
+	}
+	rest := strings.TrimPrefix(name, "mcp__")
+	if idx := strings.Index(rest, "__"); idx > 0 {
+		return set["mcp__"+rest[:idx]+"__*"]
+	}
+	return false
 }
 
 // GetEnabledTools returns the ordered list of tool names that are currently

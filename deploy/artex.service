@@ -1,0 +1,24 @@
+# systemd unit for ARTEX (installed by scripts/install-kali.sh to /etc/systemd/system/artex.service).
+# The UI/API and the recording proxy bind to localhost only. For remote access use an SSH tunnel
+# (ssh -L 8787:127.0.0.1:8787 user@host) or a reverse proxy with TLS.
+[Unit]
+Description=ARTEX penetration testing platform
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=artex
+WorkingDirectory=/opt/artex
+Environment=ARTEX_KEY_DIR=/opt/artex/keys
+ExecStart=/opt/artex/artex -addr 127.0.0.1:8787 -proxy 127.0.0.1:8788
+Restart=on-failure
+RestartSec=5
+# NoNewPrivileges must stay off: nmap/masscan raw scans need capabilities.
+NoNewPrivileges=no
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

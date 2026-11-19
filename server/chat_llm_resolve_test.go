@@ -44,8 +44,8 @@ func TestChatUnavailableReasonDistinguishesStates(t *testing.T) {
 	})
 
 	// Profile exists but is not activated.
-	if reason := s.chatUnavailableReason(); !strings.Contains(reason, "No active") {
-		t.Fatalf("inactive reason=%q, want No active", reason)
+	if reason := s.chatUnavailableReason(); !strings.Contains(reason, "No LLM profile is active") {
+		t.Fatalf("inactive reason=%q, want No LLM profile is active", reason)
 	}
 
 	// Once activated, the reason no longer claims a missing/inactive config.

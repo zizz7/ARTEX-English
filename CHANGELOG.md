@@ -2,7 +2,36 @@
 
 Notable changes to this project are recorded in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/).
 
-## [Unreleased]
+## [Unreleased] - English fork
+
+### Fork
+
+#### Added
+
+- Full English translation of the UI, agent prompts, tool descriptions, logs, docs, and scripts. Chinese is kept only where code matches against it (Chinese LLM quota errors, ICP filing numbers, CJK test fixtures).
+- Five methodology skills, enabled for `worker`, `pentest`, and `auto`: `access-control-idor`, `auth-session-testing`, `ssrf-testing`, `file-upload-testing`, `subdomain-takeover-cloud`. `hexbrain-research` (for the optional HexBrain MCP) ships disabled.
+- `Dockerfile.kali` and `docker-compose.kali.yml`: a Kali-based image with nmap, masscan, nuclei, httpx, subfinder, ffuf, feroxbuster, gobuster, sqlmap, nikto, whatweb, wafw00f, hydra, SecLists, and searchsploit.
+- `scripts/build-image.sh`: builds the image from this repository (the published `autumn27/artex` image is the upstream Chinese build), on the host or inside node/golang containers.
+- `scripts/install-kali.sh` and `deploy/artex.service`: native Kali install with PostgreSQL, a dedicated `artex` user, localhost binding, and raw-scan capabilities.
+- `-keydir` flag / `ARTEX_KEY_DIR`: where the JWT signing key lives. Docker keeps it on the `./keys` volume, so recreating the container no longer logs everyone out.
+
+#### Changed
+
+- `report_finding` requires evidence (the request or command plus the proving output line), validates severity, and refuses an exact duplicate (same class, name, and asset set) by returning the existing finding.
+- Planner: a critical or high finding is independently reproduced by one verification intent before it closes a goal, unless its evidence is unambiguous. graph_overview shows the last 30 finished intents (was 15).
+- Worker: a failed, missing, or rate-limited tool is retried once with adjusted options or an equivalent tool, and otherwise recorded as an untested surface rather than a negative result. New installs give each worker run 30 minutes (was 20).
+- The end-of-round wrap-up prompt now repeats the planner's hard floor, so a round can no longer end with zero intents while nothing is running.
+- The task report leaves out findings triaged as false positive, duplicate, or ignored, and adds per-severity counts, review status, and the reporter agent's write-up.
+- Intercept rules apply to MCP tool calls by default (`mcp__*`, or `mcp__<server>__*` for one server); existing saved tool lists get the wildcard once.
+- MCP over HTTP: tool calls may run 15 minutes (the 120-second client timeout applied to everything), handshakes 2 minutes, and results are capped at 40 KB.
+- docker-compose publishes 8787/8788 on `127.0.0.1` by default (`ARTEX_BIND`) and runs the locally built `artex:local` image (`ARTEX_IMAGE`). `install.sh` and `update.sh` build the image instead of pulling it.
+- Native Windows: the interactive-shell tools are not offered (no PTY support), and Bash's description says commands run in PowerShell.
+- Upgrades from the Chinese release switch built-in prompts and tool descriptions that are still in Chinese to the English defaults (previous prompt versions stay in history). The planner and worker prompts are re-seeded once (v3).
+
+#### Fixed
+
+- `skillRelPath` returned backslash paths on Windows (`TestSkillRelPath`).
+- Three database-backed tests still expected pre-translation messages.
 
 ## [0.3.7] - 2026-08-31
 

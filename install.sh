@@ -45,9 +45,14 @@ install_docker(){
   else
     info "Reusing existing .env"
   fi
-  info "Pulling images and starting…"
-  docker compose pull || true
-  docker compose up -d
+  info "Building the ARTEX image from this repository…"
+  ./scripts/build-image.sh "${ARTEX_FLAVOR:-slim}"
+  info "Starting…"
+  if [ "${ARTEX_FLAVOR:-slim}" = kali ]; then
+    docker compose -f docker-compose.yml -f docker-compose.kali.yml up -d
+  else
+    docker compose up -d
+  fi
   ok "Started → http://localhost:8787"
   info "View logs: docker compose logs -f artex"
 }

@@ -1,0 +1,10 @@
+# Compose OVERRIDE: swaps the artex service to the Kali "full toolset" image.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.kali.yml up -d --build
+# Everything else (ports, env, volumes, postgres) comes from docker-compose.yml.
+services:
+  artex:
+    build:
+      context: .
+      dockerfile: Dockerfile.kali
+    image: artex:kali

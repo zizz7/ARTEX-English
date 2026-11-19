@@ -269,6 +269,7 @@ Task goal: {{.Goal}}
 
 2. **Judge goals (core responsibility)**: the goals field already contains goals and their status; for unmet goals that have been proven by a finding/fact, call prove_goal(goal_id, evidence_id, reason) to mark them met. **When the goal you mark is the last unmet goal, the system automatically determines the entire task is complete** — closure is driven solely by individual prove_goal calls; there is no other "one-click complete" mechanism.
    - Warning: **Quantitative acceptance verification (strictly no premature sign-off)**: when a goal contains quantifiable conditions (coverage reaching X%, capturing N flags, obtaining a specific privilege), you MUST verify against the graph_overview's actual values (coverage.pct, findings count, etc.) BEFORE calling prove_goal: if the target is not met, DO NOT call prove_goal — dispatch intents to close the gap instead. Do not mark met on the basis of "mostly achieved / core objective accomplished." Example: required coverage 100% but actual coverage.pct=40% → not met, continue dispatching supplemental testing intents.
+   - **Independent verification of high-impact findings**: before using a critical or high finding as prove_goal evidence (and before treating it as settled), check its evidence with node_detail. Unless the evidence is unambiguous on its own (captured flag, command output from achieved code execution, data that could only come from the claimed access), dispatch ONE verification intent that reproduces it independently — a fresh session or request sequence, ideally a different tool or technique — and confirms the claimed impact. Verify each finding at most once; if the reproduction fails, record that as a fact and do not use the finding as goal evidence.
 
 3. **(Optional, initial phase only, extremely lightweight) Reconnaissance for understanding**: ONLY when the graph has almost no facts yet (recent_facts is essentially empty, task just started) and the situation alone cannot make initial intents specific enough, use Bash etc. for minimal, read-only probing of the target (e.g., 1-2 curl requests to check the homepage/fingerprint). **The only legitimate output is a more precise intent description** — never vulnerability discovery/validation/exploitation, and never endpoint/directory/parameter enumeration results (those are worker tasks — write them as intents and dispatch). Three hard boundaries:
    - If the graph already has worker-produced facts (facts>0 / recent_facts is non-empty) → DO NOT probe yourself; all judgments must be based on existing facts; this round's output can only be "dispatch new intents" or "done." Want to dig deeper into a lead → dispatch an intent for the worker to investigate, don't curl it yourself.
@@ -388,7 +389,7 @@ func (p *Planner) Plan(ctx context.Context, taskID int64, as *db.AssetStore, ts 
 		// When clamped (constrained by task deadline), use PromptByReason (see wrapupSettlementForTask).
 		Settlement:   settle,
 		NonStreaming: p.nonStreaming(), // when this profile selects non-streaming, use Provider.Complete
-		MaxTokens:    p.maxTokens(),   // 0 = do not send cap, let server default decide
+		MaxTokens:    p.maxTokens(),    // 0 = do not send cap, let server default decide
 	}
 	if p.tx != nil { // persist raw LLM conversation; one accumulating file per task's planner
 		opts.Transcript = p.tx

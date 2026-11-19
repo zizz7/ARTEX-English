@@ -27,24 +27,15 @@ update_docker(){
     || die "docker / docker compose not found; please deploy with ./install.sh first"
   [ -f .env ] || die ".env not found; please run ./install.sh to complete the first deployment"
 
-  # Optional: upgrade to a specific version tag (leave empty to keep ARTEX_TAG from .env, default latest)
-  local tag; tag="$(ask 'Target image tag (press Enter to keep .env / latest)' '')"
-  if [ -n "$tag" ]; then
-    if grep -q '^ARTEX_TAG=' .env; then
-      sed -i.bak "s|^ARTEX_TAG=.*|ARTEX_TAG=${tag}|" .env && rm -f .env.bak
-    else
-      printf '\nARTEX_TAG=%s\n' "$tag" >> .env
-    fi
-    ok "Set ARTEX_TAG to ${tag}"
-  fi
-
-  # Only touch artex: postgres is pinned to 16-alpine and does not need upgrading (pulling it just wastes
-  # bandwidth, and major-version changes carry compatibility risk). artex declares depends_on postgres, so
-  # running up with the service name starts pg automatically if it is not running; if it is already running it is kept as-is, not recreated.
-  info "Pulling new image (artex only)…"
-  docker compose pull artex
+  # Only touch artex: postgres is pinned to 16-alpine and does not need upgrading. artex declares
+  # depends_on postgres, so running up with the service name starts pg automatically if it is not
+  # running; if it is already running it is kept as-is, not recreated.
+  local files=(-f docker-compose.yml)
+  [ "${ARTEX_FLAVOR:-slim}" = kali ] && files+=(-f docker-compose.kali.yml)
+  info "Rebuilding the ARTEX image from the current code…"
+  ./scripts/build-image.sh "${ARTEX_FLAVOR:-slim}"
   info "Recreating and starting (artex migrates the schema automatically on restart)…"
-  docker compose up -d artex
+  docker compose "${files[@]}" up -d artex
   ok "Update complete → http://localhost:8787"
   info "View logs: docker compose logs -f artex"
   info "Clean up old images (optional): docker image prune -f"

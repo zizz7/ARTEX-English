@@ -191,7 +191,7 @@ var builtinAgents = []builtinAgent{
 	{"worker", "Execution", "worker", "Claim one intent and execute it, write the discovered facts/vulnerabilities back to the knowledge graph, then stop.", []promptVar{
 		{"ProxyAddr", "Recording proxy address (drives the if two-way copy)", "127.0.0.1:8080", "runtime"},
 		{"WorkerName", "Worker self-identifier (optional)", "worker-1", "runtime"},
-	}, false, nil},
+	}, false, intp(1800)},
 	// Auto: the built-in "platform operations" agent. Does not take part in the penetration orchestration loop; driven via the chat page, it operates the platform with tools.
 	{"auto", "Auto", "assistant", "Platform operations assistant: manages tasks (create/view/pause/give hints) and assets with tools, and can create/modify skills, custom tools and MCP.", nil, false, nil},
 	// Penetration Testing: the built-in "independent pentest" agent. Driven via the chat page, one agent walks the whole pentest chain from recon to wrap-up, planning, executing and verifying on its own. Interactive shell is on by default.
@@ -272,7 +272,12 @@ ON CONFLICT (name) DO NOTHING`,
 // declares `mcps: ScopeSentry`, which only takes effect once it's made visible and
 // that MCP is enabled/configured.
 var builtinSkillVisibility = map[string][]string{
-	"api-recon": {"auto", "pentest", "worker"},
+	"api-recon":                {"auto", "pentest", "worker"},
+	"access-control-idor":      {"auto", "pentest", "worker"},
+	"auth-session-testing":     {"auto", "pentest", "worker"},
+	"ssrf-testing":             {"auto", "pentest", "worker"},
+	"file-upload-testing":      {"auto", "pentest", "worker"},
+	"subdomain-takeover-cloud": {"auto", "pentest", "worker"},
 }
 
 // seedBuiltinSkillVisibility binds the shipped built-in skills to their default

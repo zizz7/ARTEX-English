@@ -742,6 +742,31 @@ type FindingMeta struct {
 	AssetIDs []int64
 }
 
+// FindingReportsByNodeID maps a task's finding node ids to the detailed Markdown
+// write-up stored on the standalone row (filled by the reporter agent). Rows with no
+// report are omitted.
+func (d *DB) FindingReportsByNodeID(taskID int64) (map[int64]string, error) {
+	out := map[int64]string{}
+	if taskID <= 0 {
+		return out, nil
+	}
+	rows, err := d.Query(`SELECT node_id, report FROM findings
+		WHERE task_id=$1 AND node_id IS NOT NULL AND COALESCE(report,'')<>''`, taskID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nid int64
+		var rep string
+		if err := rows.Scan(&nid, &rep); err != nil {
+			return out, err
+		}
+		out[nid] = rep
+	}
+	return out, rows.Err()
+}
+
 // FindingMetaByNodeID maps a task's finding node ids to their standalone-row
 // metadata, so the per-task view (which reads exploration nodes) can show and
 // edit the same status — and the same anchored assets — as the global Findings page.

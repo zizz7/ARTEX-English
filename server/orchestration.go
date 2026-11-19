@@ -8,9 +8,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Autumn-27/artex/agent"
 	"github.com/Autumn-27/artex/db"
+	"github.com/Autumn-27/artex/intercept"
 	"github.com/Autumn-27/norma/permission"
 	actool "github.com/Autumn-27/norma/tool"
 )
@@ -456,7 +458,9 @@ func (s *Server) seedOrchestrationTools() {
 	s.reseedMainAgentPrompt() // mainagent prompt gains "after the goal is achieved, add_intent asks whether to create a goal" (one-time)
 	s.reseedPlannerPrompt()   // planner prompt: rewrite the "0 intents" justification + add quantitative acceptance check (one-time)
 	s.reseedWorkerPrompt()    // worker prompt: add an evidence threshold for negative conclusions (one-time)
-	s.seedReporterAgent()     // preset "report writing" agent + tool bindings + finding trigger (one-time)
+	s.reseedChinesePrompts()  // English fork: replace any built-in prompt still in Chinese with the English default (one-time)
+	s.seedInterceptMCPDefault()
+	s.seedReporterAgent() // preset "report writing" agent + tool bindings + finding trigger (one-time)
 	// Note: pentest's default tool bindings need no migration -- on a fresh initialization BuiltinToolSeeds already seeds
 	// list_assets/insert_assets/report_finding/list_findings/list_companies together with
 	// pentest (the project has no legacy DB yet, so no migration is done).
@@ -468,7 +472,7 @@ func (s *Server) seedOrchestrationTools() {
 // reaches an old DB otherwise. Preserves each tool's agent binding + enabled flag.
 // Bump the flag whenever these tools' schemas/descriptions change in code.
 func (s *Server) refreshBuiltinToolSchemas() {
-	const flag = "tool_schema_refresh_v7_list_facts_paging"
+	const flag = "tool_schema_refresh_v8_finding_evidence_english"
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}
@@ -486,9 +490,19 @@ func (s *Server) refreshBuiltinToolSchemas() {
 	//     SeedTool is first-insert-only, so schemas already seeded in old DBs would otherwise not receive this new parameter.
 	//   - list_facts: changed to pagination, added limit/before/q input parameters; the empty schema already seeded in old DBs would otherwise
 	//     show "no parameters" on the tool management page, and the model would not get these parameter descriptions either.
-	refreshBuiltin := map[string]bool{"goal_met": true, "insert_assets": true, "list_facts": true}
+	//   - report_finding: evidence became required (the handler also rejects empty evidence).
+	// Any other built-in tool whose stored description still contains Chinese (a DB created
+	// by the upstream Chinese release) is refreshed to the English default as well; English
+	// or user-edited descriptions are left alone.
+	refreshBuiltin := map[string]bool{"goal_met": true, "insert_assets": true, "list_facts": true, "report_finding": true}
+	stored := map[string]string{}
+	if rows, err := s.m.pg.ListTools(); err == nil {
+		for _, r := range rows {
+			stored[r.Key] = r.Description
+		}
+	}
 	for _, sd := range agent.BuiltinToolSeeds() {
-		if !refreshBuiltin[sd.Key] {
+		if !refreshBuiltin[sd.Key] && !containsHan(stored[sd.Key]) {
 			continue
 		}
 		schema, _ := json.Marshal(sd.Schema)
@@ -584,7 +598,7 @@ func (s *Server) reseedMainAgentPrompt() {
 // recovered from the version records. Guarded by a settings flag -> runs only once. Fresh DBs need no handling (SeedPromptIfEmpty has already seeded the latest default). Structurally identical to
 // reseedGoalsPrompt in every respect.
 func (s *Server) reseedPlannerPrompt() {
-	const flag = "planner_prompt_compact_realistic_v2"
+	const flag = "planner_prompt_compact_realistic_v3"
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}
@@ -613,7 +627,7 @@ func (s *Server) reseedPlannerPrompt() {
 // existing versions in old DBs do not receive it, so version management is used to [append a new version] and switch to it; the old version is still kept in history and can be recovered.settings flag
 // guard -> runs only once. Fresh DBs need no handling. Structurally identical to reseedGoalsPrompt.
 func (s *Server) reseedWorkerPrompt() {
-	const flag = "worker_prompt_compact_v2"
+	const flag = "worker_prompt_compact_v3"
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}
@@ -635,6 +649,76 @@ func (s *Server) reseedWorkerPrompt() {
 		return
 	}
 	log.Printf("[prompts] worker prompt new default version appended (streamlined refactor + negatives changed to observational style + cross-intent lead reporting, one-time)")
+}
+
+// reseedChinesePrompts switches every built-in agent whose current prompt still contains
+// Chinese (a DB created by the upstream Chinese release) to the English code default.
+// ResetPromptToDefault appends a new version, so the Chinese prompt stays in history.
+func (s *Server) reseedChinesePrompts() {
+	const flag = "english_fork_prompts_v1"
+	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
+		return
+	}
+	defer func() { _ = s.m.pg.SetSetting(flag, "true") }()
+	for key, tmpl := range agent.BuiltinPromptSeeds() {
+		a, err := s.m.pg.GetAgentByKey(key)
+		if err != nil || a == nil || tmpl == "" {
+			continue
+		}
+		cur, err := s.m.pg.CurrentPrompt(a.ID)
+		if err != nil || !containsHan(cur) {
+			continue
+		}
+		if _, err := s.m.pg.ResetPromptToDefault(a.ID, tmpl); err != nil {
+			log.Printf("[prompts] %s prompt switch to English default failed: %v", key, err)
+			continue
+		}
+		log.Printf("[prompts] %s prompt switched to the English default (previous version kept in history)", key)
+	}
+}
+
+// seedInterceptMCPDefault adds the mcp__* wildcard ONCE to an already-saved
+// intercept_enabled_tools list, so installs that customized the list also run the
+// intercept rules on MCP tool calls. Fresh installs get it from the code default; a
+// user who removes it afterwards keeps that choice.
+func (s *Server) seedInterceptMCPDefault() {
+	const flag = "intercept_mcp_wildcard_v1"
+	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
+		return
+	}
+	defer func() { _ = s.m.pg.SetSetting(flag, "true") }()
+	val, ok, err := s.m.pg.GetSetting("intercept_enabled_tools")
+	if err != nil || !ok {
+		return
+	}
+	var names []string
+	if json.Unmarshal([]byte(val), &names) != nil {
+		return
+	}
+	for _, n := range names {
+		if n == intercept.MCPWildcard {
+			return
+		}
+	}
+	raw, _ := json.Marshal(append(names, intercept.MCPWildcard))
+	if err := s.m.pg.SetSetting("intercept_enabled_tools", string(raw)); err != nil {
+		log.Printf("[intercept] adding %s to enabled tools failed: %v", intercept.MCPWildcard, err)
+		return
+	}
+	if s.m.interceptor != nil {
+		s.m.interceptor.Invalidate()
+	}
+	log.Printf("[intercept] intercept rules now also apply to MCP tool calls (%s)", intercept.MCPWildcard)
+}
+
+// containsHan reports whether s contains any Han (Chinese) character.
+func containsHan(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // seedReporterAgent presets a custom "report writing" agent (builtin=false, editable/deletable in the UI):

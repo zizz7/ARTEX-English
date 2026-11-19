@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -644,6 +645,35 @@ WHERE exploration_id=$1 AND kind=$2 ORDER BY id DESC LIMIT $3`, s.expID, kind, l
 	}
 	defer rows.Close()
 	return scanNodes(rows)
+}
+
+// FindDuplicateFinding returns the id of an existing finding in this exploration
+// with the same vulnclass and name (case/space-insensitive) AND exactly the same set
+// of anchored assets, or 0 if none. Requiring an identical asset set keeps distinct
+// instances of one bug class (e.g. SQLi on two different parameters) separate.
+func (s *ExplorationStore) FindDuplicateFinding(vulnclass, name string, anchors []int64) (int64, error) {
+	ids := append([]int64(nil), anchors...)
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	parts := make([]string, 0, len(ids))
+	for i, id := range ids {
+		if i > 0 && id == ids[i-1] {
+			continue
+		}
+		parts = append(parts, strconv.FormatInt(id, 10))
+	}
+	var id int64
+	err := s.db.QueryRow(`
+SELECT n.id FROM exploration_nodes n
+WHERE n.exploration_id=$1 AND n.kind='finding'
+  AND lower(trim(COALESCE(n.payload->>'vulnclass','')))=lower(trim($2))
+  AND lower(trim(COALESCE(n.payload->>'name','')))=lower(trim($3))
+  AND COALESCE((SELECT string_agg(a.asset_id::text, ',' ORDER BY a.asset_id)
+                FROM exploration_anchors a WHERE a.node_id=n.id), '')=$4
+ORDER BY n.id LIMIT 1`, s.expID, vulnclass, name, strings.Join(parts, ",")).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
 }
 
 // ListByKindPage returns one newest-first page of nodes of a kind for reverse

@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+#
+# "Full toolset" runtime image based on Kali Linux. Same layout as Dockerfile (prebuilt binary, nothing compiled
+# in the image) but ships a broad pentest toolkit so agents can run nmap/nuclei/sqlmap/etc. out of the box.
+#
+# Trade-off: kalilinux/kali-rolling is NOT pinned. You get the newest tool versions on every build, at the cost
+# of reproducibility (two builds on different days can differ). Pin by digest (FROM kalilinux/kali-rolling@sha256:...)
+# if you need repeatable builds.
+#
+# Prepare the binary first (same as Dockerfile):
+#   cd web && npm run build:static && cd ..
+#   cp -r web/out server/webui/dist
+#   CGO_ENABLED=0 GOARCH=amd64 go build -tags embedui -o dist/amd64/artex ./cmd/artex
+# Then build via the compose override:
+#   docker compose -f docker-compose.yml -f docker-compose.kali.yml up -d --build
+FROM kalilinux/kali-rolling
+ARG TARGETARCH
+ENV DEBIAN_FRONTEND=noninteractive
+# Tools come from the Kali repositories (no curl|sh). Notes on package names:
+#  - bind9-dnsutils provides dig/nslookup (the old "dnsutils" name is a transitional package).
+#  - jwt-tool is intentionally omitted: its Kali package name is uncertain; install it manually if needed
+#    (e.g. pip install in a venv, or git clone ticarpi/jwt_tool).
+#  - exploitdb provides searchsploit.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl wget git jq unzip ripgrep vim \
+      python3 python3-pip nodejs npm \
+      bind9-dnsutils iputils-ping netcat-openbsd whois \
+      nmap masscan nuclei httpx-toolkit subfinder ffuf feroxbuster gobuster \
+      sqlmap nikto whatweb wafw00f dirb hydra seclists exploitdb \
+      tcpdump socat proxychains4 \
+    && rm -rf /var/lib/apt/lists/* \
+    # Kali names ProjectDiscovery's httpx "httpx-toolkit"; agents and skills call it as httpx.
+    && { command -v httpx >/dev/null || ln -s /usr/bin/httpx-toolkit /usr/local/bin/httpx; }
+# Preinstall Playwright MCP and CLI (globally), so nothing is downloaded via npx at runtime.
+# @playwright/mcp: the browser MCP runs directly via `npx @playwright/mcp` (already installed globally, no -y/@latest needed).
+# @playwright/cli: provides playwright-cli; --help is run after install to verify it is executable.
+# Also install playwright (provides browser management), then use --with-deps to preinstall chromium and its system dependencies,
+# so the MCP/CLI in the container work on first launch without downloading a browser over the network.
+RUN npm install -g @playwright/mcp@latest @playwright/cli@latest playwright@latest \
+    && playwright-cli --help \
+    && playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+# Prebuilt binary for the matching architecture (dist/amd64/artex or dist/arm64/artex)
+COPY dist/${TARGETARCH}/artex /app/artex
+RUN chmod +x /app/artex
+COPY skills/ /app/skills/
+# data/ = workspace + traffic index; keys/ = JWT signing key (kept out of the browsable workspace)
+ENV ARTEX_KEY_DIR=/app/keys
+VOLUME ["/app/data", "/app/keys"]
+EXPOSE 8787 8788
+ENTRYPOINT ["/app/artex"]
+CMD ["-addr", ":8787", "-proxy", ":8788"]

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/permission"
@@ -26,6 +27,28 @@ import (
 )
 
 const protocolVersion = "2025-06-18"
+
+const (
+	// handshakeTimeout bounds initialize, tools/list and session close.
+	handshakeTimeout = 2 * time.Minute
+	// toolCallTimeout bounds one tools/call: long enough for remote scanners
+	// (nmap, sqlmap, nuclei) that answer only when the scan ends.
+	toolCallTimeout = 15 * time.Minute
+	// maxToolOutput caps the text returned to the model from one tool call, in bytes.
+	maxToolOutput = 40000
+)
+
+// capOutput truncates text to maxToolOutput bytes on a UTF-8 boundary and says so.
+func capOutput(text string) string {
+	if len(text) <= maxToolOutput {
+		return text
+	}
+	cut := maxToolOutput
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + fmt.Sprintf("\n\n[output truncated: %d of %d bytes shown; narrow the query or request a smaller result]", cut, len(text))
+}
 
 // ToolName mirrors mcp.ToolName so remote tools share the mcp__server__tool scheme.
 func ToolName(server, name string) string { return "mcp__" + server + "__" + name }
@@ -70,9 +93,11 @@ func New(ctx context.Context, server, url string, headers map[string]string) (*C
 		server:  server,
 		url:     url,
 		headers: headers,
-		http:    &http.Client{Timeout: 120 * time.Second},
+		http:    &http.Client{}, // per-request deadlines come from the call's context
 	}
-	if err := c.initialize(ctx); err != nil {
+	ictx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	if err := c.initialize(ictx); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -91,6 +116,8 @@ func (c *Client) initialize(ctx context.Context) error {
 
 // Tools lists the server's tools and adapts them to CoreTools.
 func (c *Client) Tools(ctx context.Context) ([]actool.CoreTool, error) {
+	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
 	raw, err := c.call(ctx, "tools/list", map[string]any{})
 	if err != nil {
 		return nil, err
@@ -132,7 +159,9 @@ func (c *Client) wrap(rt remoteTool) actool.CoreTool {
 			if len(in) > 0 {
 				_ = json.Unmarshal(in, &args)
 			}
-			raw, err := c.call(ctx, "tools/call", map[string]any{"name": rt.Name, "arguments": args})
+			cctx, cancel := context.WithTimeout(ctx, toolCallTimeout)
+			defer cancel()
+			raw, err := c.call(cctx, "tools/call", map[string]any{"name": rt.Name, "arguments": args})
 			if err != nil {
 				return actool.Errorf("Error: " + err.Error()), nil
 			}
@@ -150,7 +179,7 @@ func (c *Client) wrap(rt remoteTool) actool.CoreTool {
 			for _, blk := range res.Content {
 				text += blk.Text
 			}
-			return actool.Result{Content: []llm.ContentBlock{llm.TextBlock(text)}, IsError: res.IsError}, nil
+			return actool.Result{Content: []llm.ContentBlock{llm.TextBlock(capOutput(text))}, IsError: res.IsError}, nil
 		},
 	})
 }
@@ -160,6 +189,8 @@ func (c *Client) wrap(rt remoteTool) actool.CoreTool {
 // from Tools(), this bypasses the agent permission (AskUser) layer — it is meant
 // for backend batch jobs (e.g. asset sync) that call MCP tools programmatically.
 func (c *Client) Call(ctx context.Context, tool string, args any) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, toolCallTimeout)
+	defer cancel()
 	raw, err := c.call(ctx, "tools/call", map[string]any{"name": tool, "arguments": args})
 	if err != nil {
 		return "", err
@@ -193,7 +224,9 @@ func (c *Client) Close() error {
 	if sid == "" {
 		return nil
 	}
-	req, err := http.NewRequest(http.MethodDelete, c.url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), handshakeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.url, nil)
 	if err != nil {
 		return nil
 	}

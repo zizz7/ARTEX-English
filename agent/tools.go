@@ -406,7 +406,7 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 		case "running":
 			running = append(running, n)
 		case "done", "blocked", "exhausted":
-			if len(recentDone) < 15 {
+			if len(recentDone) < recentDoneWindow {
 				recentDone = append(recentDone, n)
 			}
 		}
@@ -1177,10 +1177,18 @@ func (t *ToolSet) goalMet() actool.CoreTool {
 		})
 }
 
+// recentDoneWindow is how many finished intents graph_overview shows the planner.
+// Too small and long tasks re-dispatch work the planner can no longer see.
+const recentDoneWindow = 30
+
 // --- worker write tools ---
 
+// minFindingEvidence is the shortest evidence text report_finding accepts; anything
+// shorter cannot contain both the request/command and the proving output line.
+const minFindingEvidence = 20
+
 func (t *ToolSet) addFinding() actool.CoreTool {
-	return writeTool("report_finding", "[Important] You MUST call this tool when a vulnerability is found! Records a confirmed vulnerability finding. In task context intent_id is required (the id of the intent currently being executed); in conversation context intent_id may be omitted.",
+	return writeTool("report_finding", "[Important] You MUST call this tool when a vulnerability is found and reproduced! Records a confirmed vulnerability finding. evidence is required: the exact request or command plus the key response/output line that proves it. Unverified suspicions belong in record_fact, not here. In task context intent_id is required (the id of the intent currently being executed); in conversation context intent_id may be omitted.",
 		obj(map[string]any{
 			"vulnclass": str("Vulnerability class (category, e.g. SQL Injection / IDOR / XSS)"),
 			"name":      str("Vulnerability name (a specific readable title, e.g. 'IDOR in order API endpoint'; recommended — if empty the frontend falls back to displaying vulnclass)"),
@@ -1188,8 +1196,8 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 			"summary":   str("Finding summary"),
 			"intent_id": idp("Intent id that produced this finding (required in task context; optional in conversation context)"),
 			"asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "[Provide whenever possible, otherwise the vulnerability location must be clearly stated in the summary] Affected asset ids (optional, 0/1/multiple): parameters/endpoints/sites etc. If a vulnerability affects multiple assets, include all; for pure observations you may omit."},
-			"evidence":  str("Evidence/PoC text"),
-		}, "vulnclass", "severity", "summary"),
+			"evidence":  str("Required. Reproducible proof: the exact request/command and the key response/output line that demonstrates the vulnerability"),
+		}, "vulnclass", "severity", "summary", "evidence"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				VulnClass, Name, Severity, Summary, Evidence string
@@ -1197,6 +1205,13 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 				AssetIDs                                     []json.RawMessage `json:"asset_ids"`
 			}
 			_ = json.Unmarshal(in, &a)
+			a.Severity = strings.ToLower(strings.TrimSpace(a.Severity))
+			if !db.ValidSeverity(a.Severity) {
+				return actool.Errorf(fmt.Sprintf("severity must be one of critical|high|medium|low (got %q); informational observations belong in record_fact", a.Severity)), nil
+			}
+			if len(strings.TrimSpace(a.Evidence)) < minFindingEvidence {
+				return actool.Errorf("evidence is required: include the exact request or command you ran and the key response/output line that proves the vulnerability. If you could not reproduce it, record it with record_fact instead of report_finding"), nil
+			}
 			payload := map[string]any{"vulnclass": a.VulnClass, "name": a.Name, "severity": a.Severity, "summary": a.Summary,
 				"evidence": map[string]any{"by": t.worker, "poc": a.Evidence}}
 			var anchors []int64
@@ -1213,6 +1228,9 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 					if err != nil || node == nil || node.Kind != db.KindIntent {
 						return actool.Errorf("intent_id must be an intent of this task (linked task intents are read-only)"), nil
 					}
+				}
+				if dup, derr := t.ts.FindDuplicateFinding(a.VulnClass, a.Name, anchors); derr == nil && dup > 0 {
+					return actool.Text(fmt.Sprintf("duplicate: finding %d already records this vulnerability (same class, name and affected assets); no new finding was created. Continue with untested surfaces instead of re-reporting it.", dup)), nil
 				}
 				var err error
 				id, err = t.ts.AddNode(db.KindFinding, payload, 9, "confirmed", t.worker, anchors)
