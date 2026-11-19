@@ -10,18 +10,18 @@ func TestParseVerdict(t *testing.T) {
 		wantReason string
 	}{
 		{"bare allow", "ALLOW", "allow", ""},
-		{"bare deny", "DENY:删除生产文件(D4)", "deny", "删除生产文件(D4)"},
-		{"bare ask", "ASK:归属不明", "ask", "归属不明"},
-		{"lowercase", "deny: rm 系统文件", "deny", "rm 系统文件"},
-		{"fullwidth colon", "DENY：命中D4", "deny", "命中D4"},
-		// The model echoing the prompt's Chinese label must NOT fall through to
+		{"bare deny", "DENY:deleted production files (D4)", "deny", "deleted production files (D4)"},
+		{"bare ask", "ASK:ownership unclear", "ask", "ownership unclear"},
+		{"lowercase", "deny: rm system files", "deny", "rm system files"},
+		{"fullwidth colon", "DENY：hits D4", "deny", "hits D4"},
+		// The model echoing the prompt's label must NOT fall through to
 		// unparseable (which would fail-open on a real DENY).
-		{"echoed label deny", "拦截:DENY:命中D5", "deny", "命中D5"},
-		{"echoed label allow", "放行:ALLOW", "allow", ""},
-		{"echoed label ask", "转人工：ASK:无法判断影响面", "ask", "无法判断影响面"},
+		{"echoed label deny", "Block:DENY:hits D5", "deny", "hits D5"},
+		{"echoed label allow", "Pass:ALLOW", "allow", ""},
+		{"echoed label ask", "Escalate：ASK:cannot determine blast radius", "ask", "cannot determine blast radius"},
 		{"leading whitespace/blank line", "\n  ALLOW\n", "allow", ""},
-		{"extra trailing text on later line", "DENY:清库(D4)\n其它解释", "deny", "清库(D4)"},
-		{"unparseable", "我认为这个命令没问题", "", ""},
+		{"extra trailing text on later line", "DENY:wipe database (D4)\nother explanation", "deny", "wipe database (D4)"},
+		{"unparseable", "I think this command is fine", "", ""},
 		{"empty", "", "", ""},
 	}
 	for _, c := range cases {

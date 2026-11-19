@@ -32,15 +32,15 @@ function AgentChip({ name }: { name: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "pending") return <Badge variant="outline" className="border-amber-400 text-amber-600">待审批</Badge>;
-  if (status === "allowed") return <Badge variant="outline" className="border-emerald-500 text-emerald-600">已允许</Badge>;
-  if (status === "denied")  return <Badge variant="outline" className="border-red-500 text-red-600">已拒绝</Badge>;
-  return <Badge variant="outline" className="text-muted-foreground">已超时</Badge>;
+  if (status === "pending") return <Badge variant="outline" className="border-amber-400 text-amber-600">Pending approval</Badge>;
+  if (status === "allowed") return <Badge variant="outline" className="border-emerald-500 text-emerald-600">Allowed</Badge>;
+  if (status === "denied")  return <Badge variant="outline" className="border-red-500 text-red-600">Denied</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground">Timed out</Badge>;
 }
 
 function MatchCell({ row }: { row: InterceptApprovalRow }) {
   const isModel = !row.rule_id;
-  const reason = row.reason?.replace(/^\[模型\]\s*/, "").trim();
+  const reason = row.reason?.replace(/^\[(Model|模型)\]\s*/, "").trim();
   return (
     <div className="space-y-0.5">
       {row.rule_name ? (
@@ -48,7 +48,7 @@ function MatchCell({ row }: { row: InterceptApprovalRow }) {
       ) : isModel ? (
         <Badge variant="outline" className="gap-1 border-violet-400 text-violet-600">
           <BotIcon className="h-3 w-3" />
-          模型判定
+          Model verdict
         </Badge>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
@@ -108,7 +108,7 @@ export function InterceptTab({ taskId }: Props) {
     setDeciding(id);
     try {
       await api.interceptDecide(id, decision);
-      toast.success(decision === "allowed" ? "已允许执行" : "已拒绝执行");
+      toast.success(decision === "allowed" ? "Execution allowed" : "Execution denied");
       setRows((prev) =>
         prev.map((r) => r.id === id ? { ...r, status: decision, decided_at: new Date().toISOString() } : r),
       );
@@ -125,7 +125,7 @@ export function InterceptTab({ taskId }: Props) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
         <ShieldAlertIcon className="h-8 w-8 text-muted-foreground/30" />
-        <p className="text-sm text-muted-foreground">此任务暂无拦截审批记录</p>
+        <p className="text-sm text-muted-foreground">No intercept approval records for this task</p>
       </div>
     );
   }
@@ -137,16 +137,16 @@ export function InterceptTab({ taskId }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ShieldAlertIcon className="h-4 w-4 text-muted-foreground" />
-          拦截审批
+          Intercept Approvals
           {pending.length > 0 && (
             <Badge className="rounded-full bg-amber-500 text-white text-[10px] px-1.5">
-              {pending.length} 待审批
+              {pending.length} Pending approval
             </Badge>
           )}
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCwIcon className="mr-1 h-3.5 w-3.5" />
-          刷新
+          Refresh
         </Button>
       </div>
 
@@ -155,18 +155,18 @@ export function InterceptTab({ taskId }: Props) {
         <div className="rounded-lg border border-amber-400/40 bg-amber-50/30 dark:bg-amber-950/10">
           <div className="flex items-center gap-2 border-b border-amber-400/30 px-4 py-2.5 text-xs font-medium text-amber-700 dark:text-amber-400">
             <ShieldAlertIcon className="h-3.5 w-3.5" />
-            待处理（{pending.length}）— 超时 5 分钟后自动拒绝
+            Pending ({pending.length}) — auto-denied after a 5-minute timeout
           </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead className="w-28">Agent</TableHead>
-                <TableHead>工具</TableHead>
-                <TableHead>规则</TableHead>
-                <TableHead className="w-48">参数</TableHead>
-                <TableHead>时间</TableHead>
-                <TableHead className="w-32 text-right">操作</TableHead>
+                <TableHead>Tool</TableHead>
+                <TableHead>Rule</TableHead>
+                <TableHead className="w-48">Parameters</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead className="w-32 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -183,10 +183,10 @@ export function InterceptTab({ taskId }: Props) {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button size="sm" className="h-7 px-2 text-xs" disabled={deciding === row.id} onClick={() => decide(row.id, "allowed")}>
-                        <CheckIcon className="mr-1 h-3 w-3" />允许
+                        <CheckIcon className="mr-1 h-3 w-3" />Allow
                       </Button>
                       <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" disabled={deciding === row.id} onClick={() => decide(row.id, "denied")}>
-                        <XIcon className="mr-1 h-3 w-3" />拒绝
+                        <XIcon className="mr-1 h-3 w-3" />Deny
                       </Button>
                     </div>
                   </TableCell>
@@ -200,19 +200,19 @@ export function InterceptTab({ taskId }: Props) {
       {/* history table */}
       <div className="rounded-lg border">
         <div className="border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">
-          全部记录（{rows.length}）
+          All records ({rows.length})
         </div>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">#</TableHead>
               <TableHead className="w-28">Agent</TableHead>
-              <TableHead>工具</TableHead>
-              <TableHead>规则</TableHead>
-              <TableHead className="w-48">参数</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>申请时间</TableHead>
-              <TableHead>决定时间</TableHead>
+              <TableHead>Tool</TableHead>
+              <TableHead>Rule</TableHead>
+              <TableHead className="w-48">Parameters</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Requested at</TableHead>
+              <TableHead>Decided at</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

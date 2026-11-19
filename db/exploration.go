@@ -242,7 +242,7 @@ func (s *ExplorationStore) UpdateGoalPayload(id int64, text, vulnclass string) e
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("目标不存在")
+		return fmt.Errorf("goal does not exist")
 	}
 	return nil
 }
@@ -257,7 +257,7 @@ func (s *ExplorationStore) DeleteGoal(id int64) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("目标不存在")
+		return fmt.Errorf("goal does not exist")
 	}
 	return nil
 }
@@ -280,7 +280,7 @@ WHERE exploration_id=$1 AND kind='intent' AND state='running'`, s.expID)
 // ReopenIntent flips ONE not-successfully-finished intent (blocked/exhausted/stopped)
 // back to 'open' so a worker re-claims it (graph writes it already produced stay).
 // The worker resumes from its prior LLM transcript instead of restarting from scratch.
-// done/open/running are left untouched. Returns whether a row changed. Used by "重跑".
+// done/open/running are left untouched. Returns whether a row changed. Used by "re-run".
 func (s *ExplorationStore) ReopenIntent(id int64) (bool, error) {
 	res, err := s.db.Exec(`UPDATE exploration_nodes
 SET state='open', completed_at=NULL, blocked_reason=NULL
@@ -381,8 +381,8 @@ func (s *ExplorationStore) StopIntentWithReason(id int64, reason, origin string)
 		origin = "user"
 	}
 	raw, _ := json.Marshal(map[string]any{
-		"summary":     "用户删除了该意图",
-		"detail":      "删除原因：" + reason,
+		"summary":     "The user deleted this intent",
+		"detail":      "Deletion reason: " + reason,
 		"confidence":  "observed",
 		"user_cancel": true,
 	})
@@ -475,7 +475,7 @@ func (s *ExplorationStore) CancelIntent(id int64) (IntentCleanup, error) {
 			exploration_id, worker, kind, summary, metadata,
 			input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, created_at)
 			VALUES ($1,'token-ledger','result',$2,$3,$4,$5,$6,$7,$8)`,
-			s.expID, fmt.Sprintf("已取消意图 #%d 的 Token 计量", id), metadata,
+			s.expID, fmt.Sprintf("Cancelled token metering for intent #%d", id), metadata,
 			bucket.Usage.InputTokens, bucket.Usage.OutputTokens,
 			bucket.Usage.CacheReadTokens, bucket.Usage.CacheWriteTokens, bucket.Day); err != nil {
 			return out, err
@@ -904,8 +904,8 @@ WHERE exploration_id=$1 AND kind='intent' AND state IN ('open','running'))`, s.e
 }
 
 // HasOpenGoal reports whether this exploration still has any goal in state 'open'.
-// false ⇒ 所有目标已 met/abandoned（或本任务无目标）⇒ 进入 goalless（人工直投）分支：
-// planner 停跑，任务是否结束改由 frontier 是否抽干决定。met 与 abandoned 都算"已了结"。
+// false ⇒ all goals are met/abandoned (or this task has no goals) ⇒ enter the goalless (manual direct-injection) branch:
+// the planner stops running, and whether the task ends is decided by whether the frontier is drained. Both met and abandoned count as "settled".
 func (s *ExplorationStore) HasOpenGoal() (bool, error) {
 	var exists bool
 	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM exploration_nodes
@@ -1016,7 +1016,7 @@ func (d *DB) TokenTotalsAll() (map[int64]TokenUsage, error) {
 // LastActivityAll returns the unix time of the most recent activity per
 // exploration (exploration_id → max created_at epoch), one query for all tasks.
 // Persisted (unlike Engine.LastActivity's in-memory map), so it survives restarts
-// and gives终态任务 a stable "ran until" time for computing run duration.
+// and gives terminal-state tasks a stable "ran until" time for computing run duration.
 func (d *DB) LastActivityAll() (map[int64]int64, error) {
 	rows, err := d.Query(`SELECT exploration_id, EXTRACT(EPOCH FROM MAX(created_at))::bigint FROM activity GROUP BY exploration_id`)
 	if err != nil {
@@ -1265,7 +1265,7 @@ func (s *ExplorationStore) ActivityListForTerminalIntent(nodeID, sinceID int64, 
 // ActivitySessionFilter selects one UI "session" within a task's activity stream.
 // Exactly one field is meaningful:
 //   - Worker != ""  → filter by worker name (Main = "mainagent", Plan = "planner").
-//     Goal Agent 的第 0 轮拆解也以 worker="planner" 落库，故 Plan 会话完整覆盖 Goal+Planner。
+//     The Goal Agent's round-0 decomposition is also persisted with worker="planner", so the Plan session fully covers Goal+Planner.
 //   - NodeID != nil → a Worker session, filtered by node_id (= intent id).
 //
 // A zero value (both empty) matches the whole task (no session filter).

@@ -44,10 +44,10 @@ import { toneClasses, type Tone } from "@/lib/status";
 import type { Edge, ExploreKind, TaskNode } from "@/lib/types";
 
 export const relLabel: Record<string, string> = {
-  spawns: "派生",
-  derived_from: "意图链",
-  yields: "产出",
-  proves: "证明",
+  spawns: "Spawns",
+  derived_from: "Intent chain",
+  yields: "Yields",
+  proves: "Proves",
 };
 
 export const relColor: Record<string, string> = {
@@ -66,16 +66,16 @@ type TypeMeta = {
 };
 
 const typeMeta: Record<ExploreKind, TypeMeta> = {
-  task: { label: "根任务", icon: Flag, iconBg: "bg-slate-500", chip: "bg-slate-500/15 text-slate-600 dark:text-slate-300", hex: "#64748b" },
-  begin: { label: "起点", icon: Flag, iconBg: "bg-slate-500", chip: "bg-slate-500/15 text-slate-600 dark:text-slate-300", hex: "#64748b" },
-  goal: { label: "目标", icon: Target, iconBg: "bg-emerald-500", chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", hex: "#10b981" },
-  hint: { label: "提示", icon: Lightbulb, iconBg: "bg-violet-500", chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400", hex: "#8b5cf6" },
-  intent: { label: "意图", icon: Compass, iconBg: "bg-blue-500", chip: "bg-blue-500/15 text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
-  fact: { label: "事实", icon: FlaskConical, iconBg: "bg-amber-500", chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400", hex: "#f59e0b" },
-  finding: { label: "漏洞", icon: Bug, iconBg: "bg-rose-500", chip: "bg-rose-500/15 text-rose-600 dark:text-rose-400", hex: "#f43f5e" },
+  task: { label: "Root task", icon: Flag, iconBg: "bg-slate-500", chip: "bg-slate-500/15 text-slate-600 dark:text-slate-300", hex: "#64748b" },
+  begin: { label: "Origin", icon: Flag, iconBg: "bg-slate-500", chip: "bg-slate-500/15 text-slate-600 dark:text-slate-300", hex: "#64748b" },
+  goal: { label: "Goal", icon: Target, iconBg: "bg-emerald-500", chip: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", hex: "#10b981" },
+  hint: { label: "Hint", icon: Lightbulb, iconBg: "bg-violet-500", chip: "bg-violet-500/15 text-violet-600 dark:text-violet-400", hex: "#8b5cf6" },
+  intent: { label: "Intent", icon: Compass, iconBg: "bg-blue-500", chip: "bg-blue-500/15 text-blue-600 dark:text-blue-400", hex: "#3b82f6" },
+  fact: { label: "Fact", icon: FlaskConical, iconBg: "bg-amber-500", chip: "bg-amber-500/15 text-amber-600 dark:text-amber-400", hex: "#f59e0b" },
+  finding: { label: "Vulnerability", icon: Bug, iconBg: "bg-rose-500", chip: "bg-rose-500/15 text-rose-600 dark:text-rose-400", hex: "#f43f5e" },
 };
 
-// The task root is an origin fact (kind='fact', state='origin'); render it as "起点".
+// The task root is an origin fact (kind='fact', state='origin'); render it as "Origin".
 function viewKind(n: TaskNode): ExploreKind {
   return n.type === "fact" && n.state === "origin" ? "begin" : n.type;
 }
@@ -107,7 +107,7 @@ function nodeSummary(n: TaskNode): string {
         }
       }
     } catch {
-      /* 非 JSON：原样显示 */
+      /* Not JSON: display as-is */
     }
   }
   return raw;
@@ -275,8 +275,8 @@ function ExploreNode({ data, selected }: NodeProps<ExploreRFNode>) {
         </div>
         <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
           {n.inherited && n.source_task_id ? (
-            <Badge variant="outline" className="max-w-32 truncate" title={`继承自任务 #${n.source_task_id}，只读`}>
-              来源 #{n.source_task_id}
+            <Badge variant="outline" className="max-w-32 truncate" title={`Inherited from task #${n.source_task_id}, read-only`}>
+              Source #{n.source_task_id}
             </Badge>
           ) : showState ? (
             <StatusBadge domain={n.type === "goal" ? "goal" : "intent"} value={n.state} dot className="px-1.5 py-0 text-[10px]" />
@@ -341,7 +341,7 @@ function NodeDetailSheet({
                 </div>
                 {node.inherited && node.source_task_id && (
                   <Badge variant="outline" className="ml-auto shrink-0">
-                    来源任务 #{node.source_task_id} · 只读
+                    Source task #{node.source_task_id} · read-only
                   </Badge>
                 )}
               </div>
@@ -350,34 +350,34 @@ function NodeDetailSheet({
             <ScrollArea className="min-h-0 flex-1">
               <div className="flex w-full min-w-0 flex-col gap-4 p-4">
                 <section>
-                  <h4 className="text-muted-foreground mb-1 text-xs font-medium">属性</h4>
-                  <DetailRow label="类型">{meta.label}</DetailRow>
-                  <DetailRow label="状态">
+                  <h4 className="text-muted-foreground mb-1 text-xs font-medium">Properties</h4>
+                  <DetailRow label="Type">{meta.label}</DetailRow>
+                  <DetailRow label="Status">
                     {node.type === "goal" || node.type === "intent" ? (
                       <StatusBadge domain={node.type === "goal" ? "goal" : "intent"} value={node.state} dot className="px-1.5 py-0 text-[10px]" />
                     ) : (
                       <span className="font-mono text-xs">{node.state}</span>
                     )}
                   </DetailRow>
-                  <DetailRow label="优先级">
+                  <DetailRow label="Priority">
                     <span className="tabular-nums">{node.priority}</span>
                   </DetailRow>
-                  <DetailRow label="来源">
+                  <DetailRow label="Source">
                     <span className="font-mono text-xs">{node.origin}</span>
                   </DetailRow>
                   {node.inherited && node.source_task_id && (
-                    <DetailRow label="来源任务">
-                      <span className="font-mono text-xs">#{node.source_task_id}（继承，只读）</span>
+                    <DetailRow label="Source task">
+                      <span className="font-mono text-xs">#{node.source_task_id} (inherited, read-only)</span>
                     </DetailRow>
                   )}
-                  <DetailRow label="时间">{new Date(node.ts).toLocaleString("zh-CN")}</DetailRow>
+                  <DetailRow label="Time">{new Date(node.ts).toLocaleString("en-US")}</DetailRow>
                 </section>
 
                 <section className="border-t pt-3">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <h4 className="text-muted-foreground text-xs font-medium">原始数据</h4>
+                    <h4 className="text-muted-foreground text-xs font-medium">Raw data</h4>
                     <button type="button" onClick={copy} className="text-muted-foreground hover:text-foreground text-xs transition-colors">
-                      {copied ? "已复制" : "复制"}
+                      {copied ? "Copied" : "Copy"}
                     </button>
                   </div>
                   <pre className="bg-muted/50 text-foreground max-w-full overflow-hidden rounded-md border p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
@@ -399,7 +399,7 @@ function NodeDetailSheet({
 function ExplorationGraphInner({
   nodes,
   edges,
-  emptyHint = "暂无探索数据",
+  emptyHint = "No exploration data",
 }: {
   nodes: TaskNode[];
   edges: Edge[];
@@ -511,7 +511,7 @@ function ExplorationGraphInner({
   );
 }
 
-// ExplorationGraph is the shared探索图/攻击链路图 canvas — used by the task graph
+// ExplorationGraph is the shared exploration graph / attack-chain graph canvas — used by the task graph
 // tab (full graph, polled) and the finding lineage view (origin→finding subgraph).
 export function ExplorationGraph({
   nodes,

@@ -3,7 +3,7 @@
 // Every tool call passes through the PreToolUse hook before executing.
 // (The RoE authorization-scope mechanism was removed; a replacement may be added
 // later.) Destructive/exfil gating is no longer hard-coded here — it lives in the
-// DB intercept rules (seeded as ordinary [内置] rules, so users can disable or
+// DB intercept rules (seeded as ordinary [built-in] rules, so users can disable or
 // delete them), evaluated via applyIntercept.
 package guard
 
@@ -100,12 +100,12 @@ func (g *Guard) applyIntercept(ctx context.Context, ev hook.Event, cmd string) h
 	}
 	switch dec.Action {
 	case "deny":
-		// 观测:deny 命中不阻塞审批,直接记一条 denied（历史/任务拦截页可见）。
+		// Observability: a deny hit does not block approval; just record a denied entry (visible on the history/task intercept page).
 		g.interceptor.Log(ctx, intercept.ConvIDFromContext(ctx), dec, ev.ToolName, ev.Input, "denied")
 		return g.block(ev.ToolName, dec.Message, "")
 	case "allow":
-		// 观测:显式 allow 规则命中记一条 allowed（无规则命中的放行不记，避免全量刷屏）。
-		// 模型兜底判 allow(RuleID==0)同样不落库,与「未命中直接放行」一致。
+		// Observability: record an allowed entry when an explicit allow rule hits (pass-throughs with no rule hit are not recorded, to avoid flooding).
+		// A model fallback allow (RuleID==0) is likewise not persisted, consistent with "no hit means pass straight through".
 		if dec.RuleID != 0 {
 			g.interceptor.Log(ctx, intercept.ConvIDFromContext(ctx), dec, ev.ToolName, ev.Input, "allowed")
 		}
@@ -115,11 +115,11 @@ func (g *Guard) applyIntercept(ctx context.Context, ev hook.Event, cmd string) h
 		// immediately without creating a pending record — avoids orphaned DB entries
 		// and makes execOne complete fast, reducing the race against drainSynthetic.
 		if ctx.Err() != nil {
-			return g.block(ev.ToolName, "工作已取消，拦截规则阻止执行", "")
+			return g.block(ev.ToolName, "Work was cancelled; intercept rule blocked execution", "")
 		}
 		convID := intercept.ConvIDFromContext(ctx)
 		if !g.interceptor.HandleAsk(ctx, convID, dec, ev.ToolName, ev.Input) {
-			return g.block(ev.ToolName, "用户拒绝或审批超时", "")
+			return g.block(ev.ToolName, "User denied or approval timed out", "")
 		}
 		return hook.Result{}
 	}

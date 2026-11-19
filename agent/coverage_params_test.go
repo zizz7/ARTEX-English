@@ -24,23 +24,23 @@ func TestStripCoverageParams(t *testing.T) {
 	ts := NewToolSet(nil, "")
 	insert := ts.insertAssets()
 	if !hasRelatedParam(insert) {
-		t.Fatal("insert_assets 应默认带 related 参数")
+		t.Fatal("insert_assets should include the related parameter by default")
 	}
 
 	// Enabled (default): schema unchanged, related still present.
 	ts.SetCoverageEnabled(true)
 	if got := ts.StripCoverageParams([]actool.CoreTool{insert}); !hasRelatedParam(got[0]) {
-		t.Error("覆盖度开启时不应剔除 related 参数")
+		t.Error("should not strip the related parameter when coverage is enabled")
 	}
 
 	// Disabled: related stripped from the model-facing schema.
 	ts.SetCoverageEnabled(false)
 	out := ts.StripCoverageParams([]actool.CoreTool{insert})
 	if hasRelatedParam(out[0]) {
-		t.Error("覆盖度关闭时应隐藏 related 参数")
+		t.Error("should hide the related parameter when coverage is disabled")
 	}
 	// The original tool must be untouched (deep copy, no shared-map mutation).
 	if !hasRelatedParam(insert) {
-		t.Error("StripCoverageParams 不应修改原始 tool 的 schema")
+		t.Error("StripCoverageParams should not modify the original tool's schema")
 	}
 }

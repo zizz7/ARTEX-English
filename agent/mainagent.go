@@ -73,24 +73,24 @@ func (m *MainAgent) SetWebSearch(o WebSearchOpts) { m.webSearch = o }
 // tool inject a mid-run course-correction into a running work (nil = tool off).
 func (m *MainAgent) SetSteerWork(fn func(intentID int64, msg string) error) { m.steerWork = fn }
 
-// mainAgentDefaultTmpl is the built-in EDITABLE body (段 [A]) of the main agent
-// prompt, seeded into agent_prompts. Goal is a {{.Goal}} template var; the 中间
-// 产物输出规约 tail is code-owned (artifactSpec), appended after rendering.
-const mainAgentDefaultTmpl = `你是一个授权渗透测试系统的"主 agent"，是人类操作员的接口。你不亲自探索、也不自主连续生成意图（那是规划者的工作）。你的职责：
+// mainAgentDefaultTmpl is the built-in EDITABLE body (section [A]) of the main agent
+// prompt, seeded into agent_prompts. Goal is a {{.Goal}} template var; the intermediate
+// artifact output spec tail is code-owned (artifactSpec), appended after rendering.
+const mainAgentDefaultTmpl = `You are the "main agent" of an authorized penetration testing system — the human operator's interface. You do not explore on your own, nor do you autonomously generate a continuous stream of intents (that is the planner's job). Your responsibilities:
 
-1. 观察：用 graph_overview / list_findings / list_facts / list_assets / get_worker_output 回答人关于当前进展的问题。
-2. 操舵（把人的意图落到系统）：
-   - 人想"改方向/强调某类漏洞/重点某区域" → 用 add_hint 写提示（规划者下次会读到）。
-   - 人想"立刻测某个具体目标" → 用 add_intent 直接注入一条高优先级意图（priority 8-10）。系统会自动把已完成的任务拉回运行态、让 worker 领这条意图执行，跑完即回到已完成状态。
-     **当任务目标已全部达成时**（graph_overview 里 goals 均为 met）：下发前先判断这条意图背后是否隐含一个"新的、要达成的结果"。若隐含，用一句话把你猜测的目标复述给人，并**反问是否要登记为正式目标**——人要 → 用 set_goals 登记（任务随后进入常规规划、规划者会自主往下推进）；人不要 / 只是想临时探一下 → 只 add_intent 下发这一条，worker 执行完任务即回到已完成状态（不会自主继续）。若这条意图明显只是一次性查证、不隐含新目标，直接 add_intent 即可，不必每次都问。
-   - 人想"对某条正在运行的意图(work)实时纠偏（别再走 X、聚焦 Y）" → 用 steer_work（不打断、不丢已有进展，worker 下一步动作前生效）；先用 get_worker_output 看它在干嘛。方向整个错了则改用 add_intent 另下新意图。
-   - 人想"新增一个要达成的最终目标" → 用 set_goals 增补目标。系统会把该目标写入任务图并**自动把已完成/暂停的任务拉回运行态继续跑**（规划者随后会据此重新判断是否达成），无需人工再点恢复。
-   - 人想"增/改测试约束（允许/禁止某类操作，如『仅测当前端口』『禁止爆破』『只做被动侦察』）" → 用 set_constraints 登记（type=allow 允许 / type=deny 禁止）。约束会在下一轮规划时注入 planner/worker 的提示词以框定探索边界；也可在总览「约束管理」里增删改。
-3. 用人话简洁回复，说明你做了什么。
+1. Observe: Use graph_overview / list_findings / list_facts / list_assets / get_worker_output to answer the human's questions about current progress.
+2. Steer (translate the human's intent into system actions):
+   - Human wants to "change direction / emphasize a certain vulnerability class / focus on a certain area" → use add_hint to write a hint (the planner will read it on the next wake-up).
+   - Human wants to "immediately test a specific target" → use add_intent to directly inject a high-priority intent (priority 8-10). The system will automatically pull a completed task back to running state, let a worker claim this intent and execute it, then return to the completed state when done.
+     **When all task goals have been achieved** (all goals in graph_overview are met): before dispatching, first assess whether this intent implies a "new outcome to achieve". If it does, restate the inferred goal in one sentence and **ask the human whether to register it as a formal goal** — if yes → use set_goals to register it (the task then enters regular planning and the planner will autonomously drive it forward); if no / they just want to do a quick probe → only dispatch this single intent via add_intent, and the task returns to completed state after the worker finishes (no autonomous continuation). If the intent is clearly a one-off verification with no implied new goal, just use add_intent directly — no need to ask every time.
+   - Human wants to "course-correct a running intent (work) in real time (stop doing X, focus on Y)" → use steer_work (non-disruptive, preserves existing progress, takes effect before the worker's next action); first use get_worker_output to see what it's doing. If the direction is entirely wrong, use add_intent to dispatch a new intent instead.
+   - Human wants to "add a new final goal to achieve" → use set_goals to add the goal. The system writes the goal into the task graph and **automatically pulls completed/paused tasks back to running state** (the planner will then re-evaluate whether goals are met) — no need for the human to manually resume.
+   - Human wants to "add/modify test constraints (allow/prohibit certain operations, e.g. 'only test the current port', 'no brute-forcing', 'passive reconnaissance only')" → use set_constraints to register (type=allow for allowed / type=deny for prohibited). Constraints are injected into the planner/worker prompts on the next planning round to bound the exploration scope; they can also be added/edited/removed in the overview's "Constraint Management" section.
+3. Reply concisely in plain language, explaining what you did.
 
-当前任务目标：{{.Goal}}
+Current task goal: {{.Goal}}
 
-不要编造发现；只根据工具返回的真实数据回答。`
+Do not fabricate findings; only answer based on real data returned by tools.`
 
 func mainAgentSystem(goal, dataDir, workDir string) string {
 	body := renderSystem("mainagent", mainAgentDefaultTmpl, MainVars{Goal: goal, DataDir: dataDir, Now: nowStr()})
@@ -109,17 +109,17 @@ func (m *MainAgent) Chat(ctx context.Context, taskID int64, as *db.AssetStore, t
 	tsx.SetTaskID(taskID)
 	tsx.SetCoverageEnabled(as == nil || as.CoverageEnabled(taskID))
 	tsx.SetNotify(notify)         // add_hint wakes this task's planner (debounced)
-	tsx.SetResumeTask(resume)     // set_goals 新增目标 → 把已完成/暂停的任务拉回 running
-	tsx.SetNotifyGoal(notifyGoal) // set_goals 新增目标 → 给 planner 记一条「人新增了目标：…」触发
+	tsx.SetResumeTask(resume)     // set_goals adds new goal → pull completed/paused task back to running
+	tsx.SetNotifyGoal(notifyGoal) // set_goals adds new goal → record a "human added goal: ..." trigger for planner
 	tsx.steerWork = m.steerWork   // enable steer_work tool (nil = unavailable)
-	// 领域工具 + 基础默认工具集（Read/Write/Edit/MultiEdit/LS/Glob/Grep/Bash）
-	// 资产覆盖度功能关闭时剔除 add_task_scope/list_untested_assets（不入 prompt）。
+	// Domain tools + base default tool set (Read/Write/Edit/MultiEdit/LS/Glob/Grep/Bash).
+	// When asset coverage is disabled, strip add_task_scope/list_untested_assets (not included in prompt).
 	base := append(tsx.DropCoverageTools(tsx.MainAgentTools()), actool.DefaultTools()...)
 	ctx = WithRunInfo(ctx, RunInfo{TaskID: taskID, ExplorationID: explorationID(ts)})
 	tools, def, cleanup := AugmentTools(ctx, "mainagent", base)
-	tools = tsx.StripCoverageParams(tools) // 覆盖度关闭时隐藏 insert_assets 的 related 入参
+	tools = tsx.StripCoverageParams(tools) // when coverage is disabled, hide insert_assets' related param
 	defer cleanup()
-	// 本任务的工作目录 <workDir>/tasks/<taskID>，先建好。
+	// This task's working directory <workDir>/tasks/<taskID>, created upfront.
 	mainDir := ensureRunDir(m.workDir, taskID, 0)
 	system, boundary := deferredSystem(mainAgentSystem(goal, m.workDir, mainDir), def)
 	opts := agentcore.Options{
@@ -130,26 +130,26 @@ func (m *MainAgent) Chat(ctx context.Context, taskID int64, as *db.AssetStore, t
 		DeferredTools:   def.Deferred,
 		UnlockSet:       def.Unlock,
 		PermissionMode:  permission.ModeBypass,
-		EnableWebFetch:  true, // 走记录代理留痕；载入代理 CA 验证 MITM 重签的 HTTPS 证书
+		EnableWebFetch:  true, // routed through the recording proxy for audit trail; load proxy CA to verify MITM re-signed HTTPS certs
 		WebFetchProxy:   m.proxyAddr,
 		WebFetchCACert:  m.proxyCACert,
-		// 联网搜索(可选)。ddgs 无需 key；brave-free 需 BraveKey；tavily 需 TavilyKey。
-		// WebSearchProxy 是独立出口代理(http/https/socks5)，与记录流量的 MITM 代理无关；空则直连。
+		// Web search (optional). ddgs needs no key; brave-free needs BraveKey; tavily needs TavilyKey.
+		// WebSearchProxy is a separate egress proxy (http/https/socks5), independent of the MITM recording proxy; empty means direct.
 		EnableWebSearch:    m.webSearch.Enabled,
 		WebSearchBackend:   m.webSearch.Backend,
 		BraveSearchAPIKey:  m.webSearch.BraveKey,
 		TavilySearchAPIKey: m.webSearch.TavilyKey,
 		WebSearchProxy:     m.webSearch.Proxy,
-		BashEnv:            proxyEnv(m.proxyAddr, m.proxyCACert), // Bash 子命令默认走代理+信任 CA
-		WorkingDir:         mainDir,                              // 本任务工作目录 <workDir>/tasks/<taskID>
+		BashEnv:            proxyEnv(m.proxyAddr, m.proxyCACert), // Bash subcommands default to proxy + trust CA
+		WorkingDir:         mainDir,                              // this task's working directory <workDir>/tasks/<taskID>
 		ToolOutputDir:      cmdOutDir(mainDir),
 		MaxTurns:           m.maxTurns,                             // 0 = unlimited (configurable in agent management)
 		Compaction:         compactionConfig(m.compactionWindow()), // long chats stay within the window
-		Todos:              actool.NewTodoStore(),                  // 会话级临时待办（TodoWrite），纯规划用，退出即丢
-		// 命中预算(步数)→ SDK 跑收尾:向用户输出一句进展总结。Prompt 与收尾轮数可后台编辑(默认 10 轮)。
+		Todos:              actool.NewTodoStore(),                  // session-level temporary todos (TodoWrite), planning only, discarded on exit
+		// budget hit (steps) → SDK runs wrap-up: output a one-sentence progress summary to the user. Prompt and wrap-up turn count are admin-editable (default 10 turns).
 		Settlement:   wrapupSettlement("mainagent", nil),
-		NonStreaming: m.nonStreaming(), // 该 profile 选非流式时走 Provider.Complete
-		MaxTokens:    m.maxTokens(),   // 0 = 不发上限,由服务端默认值决定
+		NonStreaming: m.nonStreaming(), // when this profile selects non-streaming, use Provider.Complete
+		MaxTokens:    m.maxTokens(),   // 0 = do not send cap, let server default decide
 	}
 	if m.tx != nil { // persist raw human↔AI conversation; one accumulating file per task
 		opts.Transcript = m.tx

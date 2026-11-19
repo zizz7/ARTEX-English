@@ -1,12 +1,12 @@
 // ARTEX domain model — types used across the UI.
-// Derived from the functional spec (section 7: 关键数据形状).
+// Derived from the functional spec (section 7: key data shapes).
 
 export type TaskStatus = "created" | "queued" | "running" | "paused" | "done" | "failed" | "timeout";
 export type EngineMode = "exploring" | "paused" | "stalled" | "idle";
 
 export interface Task {
   id: string;
-  name?: string; // 可选任务名称;空/缺省=未命名,展示时回退到描述
+  name?: string; // optional task name; empty/omitted = unnamed, display falls back to the description
   category_id?: number;
   category_name?: string;
   pinned?: boolean;
@@ -37,7 +37,7 @@ export interface Task {
   source_task_ids?: string[]; // directly related tasks inherited as read-only context
   archive_blocked_by_task_id?: string; // live direct dependent that must be archived first
   company_ids?: number[]; // associated company scopes; current company assets join the task at creation
-  coverage_enabled?: boolean; // 资产覆盖度功能开关(创建时定,默认开)；false=不计算/不展示覆盖度
+  coverage_enabled?: boolean; // asset coverage feature switch (set at creation, default on); false = coverage is neither computed nor shown
 }
 
 export interface TaskCategory {
@@ -166,7 +166,7 @@ export interface AssetNode {
   name: string;
   key: string; // nkey
   value?: string;
-  company_id?: string; // 归属公司资产 id；空=未归属
+  company_id?: string; // owning company asset id; empty = unassigned
   state: NodeState;
   confidence: number; // 0..1
   attrs?: Record<string, unknown>;
@@ -281,8 +281,8 @@ export interface TaskAssetScopeMutation {
 }
 
 // ---- Asset coverage graph (per task) ----
-// 力导向「资产覆盖图」的一个节点。key 唯一：资产="a:<id>"、公司="c:<id>"、
-// 无资产行的根域名="r:<domain>"。in_scope=false 的是仅用于连线的灰色上下文节点。
+// A node of the force-directed "asset coverage graph". key is unique: asset="a:<id>", company="c:<id>",
+// root domain without an asset row="r:<domain>". in_scope=false marks gray context nodes used only for connecting edges.
 export interface CoverageGraphNode {
   key: string;
   kind: "company" | "root_domain" | "subdomain" | "ip" | "service" | "app" | "endpoint";
@@ -312,7 +312,7 @@ export interface CoverageGraphData {
   edges: CoverageGraphEdge[];
 }
 
-// 某资产在本任务探索图里关联到的意图/事实/发现（覆盖图节点抽屉用）。
+// Intents/facts/findings linked to an asset in this task's exploration graph (used by the coverage graph node drawer).
 export interface CoverageAssetRef {
   id: number;
   kind: string;
@@ -347,13 +347,13 @@ export interface WorkspaceFile {
   content?: string;
 }
 
-// 任务测试范围的一条（覆盖度分母 + 授权边界）。
+// One entry of the task test scope (coverage denominator + authorization boundary).
 export interface TaskScopeRow {
   id: number;
   task_id: number;
   kind: "company" | "root_domain" | "subdomain" | "ip" | "cidr" | "icp" | "keyword";
   company_id?: number;
-  company_name?: string; // 后端 JOIN companies 解析，仅 kind=company 有值
+  company_name?: string; // resolved by the backend via JOIN companies; only set when kind=company
   domain?: string;
   net?: string;
   value?: string;
@@ -363,14 +363,14 @@ export interface TaskScopeRow {
 
 export type CompanyScopeKind = "domain" | "ip" | "cidr" | "icp" | "keyword";
 
-// 新增企业时提交的结构化资产范围规则。
+// Structured asset scope rules submitted when adding a company.
 export interface CompanyScopeRule {
   kind: CompanyScopeKind;
   value: string;
 }
 
-// 资产范围写入的结果。errors 是本次提交里不合法的行；warnings 是与本次提交无关、
-// 但会让归属结果不符合预期的既有数据问题（如 ip 字段存了主机名的资产）。
+// Result of writing an asset scope. errors are the invalid lines in this submission; warnings are existing data problems unrelated to this submission
+// but that make ownership results unexpected (e.g. an asset whose ip field holds a hostname).
 export interface CompanyScopeMutation {
   added: number;
   skipped: number;
@@ -379,23 +379,23 @@ export interface CompanyScopeMutation {
   warnings?: string[];
 }
 
-// 公司资产范围规则的一条（归属唯一真值来源）。
+// One company asset scope rule (single source of truth for ownership).
 export interface ScopeRow {
   id: number;
   company_id: number;
   kind: CompanyScopeKind;
-  domain?: string; // kind=domain 时有值
-  net?: string; // kind=ip|cidr 时有值
-  value?: string; // kind=icp|keyword 时可能由后端直接返回
-  raw: string; // 原始用户输入，用于显示和回填
+  domain?: string; // set when kind=domain
+  net?: string; // set when kind=ip|cidr
+  value?: string; // may be returned directly by the backend when kind=icp|keyword
+  raw: string; // raw user input, used for display and refill
   reason?: string;
 }
 
-// 企业：type=company 的资产节点 + 图标 + 资产计数 + 资产范围规则。
+// Company: type=company asset node + icon + asset count + asset scope rules.
 export interface Company {
   id: number;
   name: string;
-  logo?: string; // 远程图标 URL；空则前端用名称首字母
+  logo?: string; // remote icon URL; if empty the frontend uses the first letter of the name
   asset_count: number;
   scope?: ScopeRow[];
 }
@@ -420,7 +420,7 @@ export interface TaskNode {
   inherited?: boolean;
 }
 
-// 目标管理卡片用的目标(后端已把 payload 拆成 text/vulnclass)。
+// Goal used by the goal management card (the backend has already split payload into text/vulnclass).
 export interface TaskGoal {
   id: string;
   text: string;
@@ -430,7 +430,7 @@ export interface TaskGoal {
   ts: string;
 }
 
-// 约束管理卡片用的操作约束(allow=允许 / deny=禁止)。
+// Operation constraint used by the constraint management card (allow = permitted / deny = forbidden).
 export type ConstraintKind = "allow" | "deny";
 export interface TaskConstraint {
   id: string;
@@ -443,7 +443,7 @@ export interface TaskConstraint {
 // ---- Findings ----
 export type Severity = "critical" | "high" | "medium" | "low";
 
-// 漏洞处置状态:待处理 / 处理中 / 已确认 / 已处理 / 误报 / 忽略 / 重复 / 风险接受。
+// Vulnerability disposition status: pending / in progress / confirmed / resolved / false positive / ignored / duplicate / risk accepted.
 export type FindingStatus =
   | "pending"
   | "in_progress"
@@ -454,7 +454,7 @@ export type FindingStatus =
   | "duplicate"
   | "risk_accepted";
 
-// FindingAsset 是一个漏洞绑定的资产(已在后端预渲染 label)。
+// FindingAsset is an asset bound to a vulnerability (label pre-rendered by the backend).
 export interface FindingAsset {
   id: string;
   type: string;
@@ -463,14 +463,14 @@ export interface FindingAsset {
 
 export interface Finding {
   id: string;
-  finding_id?: string; // 独立 findings 表的行 id,状态更新的句柄(任务内旧节点可能缺失)
+  finding_id?: string; // row id in the standalone findings table, the handle for status updates (may be missing on old in-task nodes)
   vulnclass: string;
-  name?: string; // 漏洞名称;为空时展示回退到 vulnclass
+  name?: string; // vulnerability name; when empty, display falls back to vulnclass
   severity: Severity;
   status: FindingStatus;
   summary: string;
   evidence: string;
-  report?: string; // 详细报告(Markdown);仅详情接口返回,列表为空
+  report?: string; // detailed report (Markdown); only returned by the detail endpoint, empty in lists
   intent_id?: string;
   param_id?: string;
   task_id?: string;
@@ -481,7 +481,7 @@ export interface Finding {
   ts: string;
 }
 
-// FindingsPage 是发现列表的服务端分页响应。
+// FindingsPage is the server-side paginated response of the findings list.
 export interface FindingsPage {
   items: Finding[];
   total: number;
@@ -491,7 +491,7 @@ export interface FindingsPage {
 
 export interface FindingGroup {
   task_id: string | number | null;
-  task_name?: string; // 可选任务名称;空/缺省=未命名
+  task_name?: string; // optional task name; empty/omitted = unnamed
   task_description: string;
   task_status: string;
   count: number;
@@ -517,7 +517,7 @@ export interface FindingDeepenResponse {
   queued: boolean;
 }
 
-// FindingStats 是发现全表聚合(统计卡 + 漏洞类型下拉),服务端计算,不受分页影响。
+// FindingStats is the aggregate over the whole findings table (stat cards + vulnerability type dropdown), computed server-side and unaffected by pagination.
 export interface FindingStats {
   total: number;
   pending: number;
@@ -529,34 +529,34 @@ export interface FindingStats {
   tasks: FindingTaskOption[];
 }
 
-// FindingTaskOption 是发现页「按任务」筛选下拉的一项:有漏洞的任务(描述为空表示任务已删除,
-// 前端回退展示 id)及其漏洞条数。
+// FindingTaskOption is one item of the findings page "by task" filter dropdown: a task that has vulnerabilities (empty description means the task was deleted,
+// the frontend falls back to showing the id) and its vulnerability count.
 export interface FindingTaskOption {
   id: string | number;
-  name?: string; // 可选任务名称;空/缺省=未命名
+  name?: string; // optional task name; empty/omitted = unnamed
   description: string;
   count: number;
 }
 
-// FindingQuery 是发现列表分页/筛选/排序参数。
+// FindingQuery holds the findings list pagination/filter/sort parameters.
 export interface FindingQuery {
   page: number;
   pageSize: number;
   severity?: "all" | Severity;
   status?: "all" | FindingStatus;
   vulnclass?: string;
-  task?: string; // 任务 id;"all"/空 = 不按任务筛选
+  task?: string; // task id; "all"/empty = do not filter by task
   query?: string;
   sort?: "severity" | "time";
-  // 资产树节点 key;选中一个节点 = 选中它的整棵子树。空 = 不按资产筛选。
+  // Asset tree node key; selecting a node = selecting its whole subtree. Empty = do not filter by asset.
   assetScope?: string;
 }
 
-// ---- Findings by asset (资产视图) ----
+// ---- Findings by asset (asset view) ----
 export type FindingAssetKind = "company" | "root_domain" | "subdomain" | "ip" | "service" | "app" | "endpoint" | "none";
 
-// FindingAssetNode 是资产树的一个节点。key 形如 a:<id>(资产)、c:<id>(企业)、
-// r:<domain>(库里没有资产行的根域名)、__none__(未关联资产)。
+// FindingAssetNode is a node of the asset tree. key looks like a:<id> (asset), c:<id> (company),
+// r:<domain> (root domain with no asset row in the DB), __none__ (no linked asset).
 export interface FindingAssetNode {
   key: string;
   parent?: string;
@@ -564,8 +564,8 @@ export interface FindingAssetNode {
   label: string;
   asset_id?: number;
   company_id?: number;
-  self: number; // 直接挂在该资产上的发现数
-  total: number; // 含子孙、按发现去重
+  self: number; // number of findings attached directly to this asset
+  total: number; // including descendants, deduplicated by finding
   critical: number;
   high: number;
   medium: number;
@@ -580,7 +580,7 @@ export interface FindingAssetTree {
   dropped_kinds?: string[];
 }
 
-// FINDING_UNASSIGNED_ASSET 与后端 db.FindingUnassignedAsset 对应。
+// FINDING_UNASSIGNED_ASSET corresponds to the backend db.FindingUnassignedAsset.
 export const FINDING_UNASSIGNED_ASSET = "__none__";
 
 // ---- Activity / sessions ----
@@ -598,12 +598,12 @@ export type ActivityKind =
   | "llm_failover" // task-level provider switch / chain exhaustion audit event
   | "intercept_request"; // user-approval request from the intercept layer
 
-// ChatAttachment 是一次上传的文件:path 相对该会话/任务工作目录(即 agent 的 CWD)。
+// ChatAttachment is an uploaded file: path is relative to the session/task working directory (i.e. the agent's CWD).
 export interface ChatAttachment {
   name: string;
   path: string;
   size: number;
-  abs?: string; // 绝对路径(scope=staging 暂存上传时返回;建任务前把它写进描述)
+  abs?: string; // absolute path (returned for scope=staging staged uploads; write it into the description before creating the task)
 }
 
 export interface Activity {
@@ -659,24 +659,24 @@ export interface TaskLLMResolutions {
   worker: TaskLLMResolution;
 }
 
-// ---- Agent triggers (P3 调度，仅自定义 agent) ----
+// ---- Agent triggers (P3 scheduling, custom agents only) ----
 export interface AgentTrigger {
   id: number;
   agent_key: string;
   enabled: boolean;
-  interval_sec: number; // 定时:每 N 秒(0=不定时)
-  on_finding: boolean; // 任意任务发现 finding 时触发
-  on_goal_met: boolean; // 任意任务达成目标时触发
-  on_task_timeout: boolean; // 任意任务超时时触发
-  on_tool_call: boolean; // 选中工具被调用(执行完成)时触发
-  on_task_create: boolean; // 任意任务被创建时触发
-  interval_message: string; // 各触发条件的独立用户消息
+  interval_sec: number; // scheduled: every N seconds (0 = not scheduled)
+  on_finding: boolean; // triggers when any task discovers a finding
+  on_goal_met: boolean; // triggers when any task meets its goal
+  on_task_timeout: boolean; // triggers when any task times out
+  on_tool_call: boolean; // triggers when a selected tool is called (execution finished)
+  on_task_create: boolean; // triggers when any task is created
+  interval_message: string; // independent user message for each trigger condition
   finding_message: string;
   goal_message: string;
   task_timeout_message: string;
   tool_call_message: string;
   task_create_message: string;
-  tool_names: string[]; // on_tool_call 选中的工具 key(至少一个)
+  tool_names: string[]; // tool keys selected for on_tool_call (at least one)
   last_fire?: string;
 }
 
@@ -739,7 +739,7 @@ export interface BatchControlItem {
   error?: string;
 }
 
-// 批量改分类的逐任务结果。失败只可能是任务已被删除，分类本身的写入是原子的。
+// Per-task result of a bulk category change. A failure can only mean the task was already deleted; the category write itself is atomic.
 export interface BatchCategoryItem {
   id: string;
   ok: boolean;
@@ -854,7 +854,7 @@ export interface TrafficHost {
 // ---- App settings (runtime toggles) ----
 export interface Settings {
   traffic_capture: boolean;
-  llm_record: boolean; // LLM 录制开关（默认关）；关闭时不记录任何 LLM 调用
+  llm_record: boolean; // LLM recording switch (default off); when off, no LLM calls are recorded
   // Web search. brave_key_set / tavily_key_set reflect whether a key is stored
   // (the values are never returned). On PUT, send the corresponding field to set/clear.
   web_search_enabled: boolean;
@@ -864,22 +864,22 @@ export interface Settings {
   // write-only: only sent on PUT to store/clear the key.
   brave_search_api_key?: string;
   tavily_search_api_key?: string;
-  // 独立出口代理(http/https/socks5)，用于访问搜索端点；与记录流量的 MITM 代理无关。空=直连。
+  // Standalone egress proxy (http/https/socks5) used to reach the search endpoint; unrelated to the MITM proxy that records traffic. Empty = direct connection.
   web_search_proxy?: string;
-  // 全局出口代理(http/https/socks5，可带 user:pass)，所有目标流量走它。开启流量捕获时作为
-  // MITM 上游；关闭捕获时直接注入 agent 的 bash/WebFetch。空=直连。
+  // Global egress proxy (http/https/socks5, may include user:pass) through which all target traffic goes. When traffic capture is on it serves as the
+  // MITM upstream; when capture is off it is injected directly into the agent's bash/WebFetch. Empty = direct connection.
   global_proxy?: string;
-  python_interpreter?: string; // 自定义脚本工具的 python 解释器路径(空=运行时检测)
-  workers?: number; // 并发工作 agent 数(默认3)；对之后启动的任务生效
-  // 任务并发上限:同时「运行中」的任务数上限。关闭=不限;开启后新建任务超限则排队,有空位自动启动。
-  task_concurrency_enabled?: boolean; // 默认 false
-  task_concurrency_limit?: number; // 开启后默认 5
-  // LLM 轮询(故障转移)。默认关；开启后「未指定模型」的 agent 在当前配置不可用
-  // （余额不足/key 失效/限流/服务异常）时自动切到下一个配置。
-  llm_pool_enabled?: boolean; // 默认 false
-  // 绑定了指定配置的 agent/任务失败时是否也回落到轮询链。默认 false = 绑定即独占。
+  python_interpreter?: string; // python interpreter path for custom script tools (empty = detect at runtime)
+  workers?: number; // number of concurrent worker agents (default 3); applies to tasks started afterwards
+  // Task concurrency limit: max number of tasks "running" at the same time. Off = unlimited; when on, new tasks over the limit are queued and start automatically when a slot frees up.
+  task_concurrency_enabled?: boolean; // default false
+  task_concurrency_limit?: number; // default 5 once enabled
+  // LLM round-robin (failover). Default off; when on, an agent with "no model specified" automatically switches to the next profile when the current profile is unavailable
+  // (insufficient balance / invalid key / rate limited / service error).
+  llm_pool_enabled?: boolean; // default false
+  // Whether an agent/task bound to a specific profile also falls back to the round-robin chain on failure. Default false = binding is exclusive.
   llm_pool_bind_fallback?: boolean;
-  // 操作约束注入范围(默认都开):把任务的 allow/deny 约束拼进对应 agent 的系统提示。
+  // Operation constraint injection scope (all on by default): splice the task's allow/deny constraints into the corresponding agent's system prompt.
   constraints_inject_planner?: boolean;
   constraints_inject_worker?: boolean;
 }
@@ -896,41 +896,41 @@ export interface LLMProfile {
   rate_per_second: number;
   rate_per_minute: number;
   context_window_k?: number;
-  // 思考开关(thinking.type): ""=不发送(默认) | "disabled"=关闭 | "enabled"=开启
+  // Thinking switch (thinking.type): "" = not sent (default) | "disabled" = off | "enabled" = on
   thinking_type?: string;
-  // 思考强度: ""=不发送(默认) | "low"/"medium"/"high"/"xhigh"/"max"
+  // Thinking effort: "" = not sent (default) | "low"/"medium"/"high"/"xhigh"/"max"
   reasoning_effort?: string;
   is_default: boolean;
-  // 轮询顺位：越大越先被选中。激活配置恒为链首，与本值无关。
+  // Round-robin priority: larger is selected first. The active profile is always first in the chain regardless of this value.
   priority?: number;
-  // true = 不作为故障转移目标（仍可被 agent/任务显式绑定使用）。
+  // true = not used as a failover target (can still be explicitly bound by an agent/task).
   pool_exclude?: boolean;
-  // true（默认）= 流式(SSE) | false = 真·非流式(stream:false，一次性返回)。
+  // true (default) = streaming (SSE) | false = true non-streaming (stream:false, returned in one shot).
   streaming?: boolean;
-  // 单次回复的输出上限(token)。0 = 不发送该字段，由服务端默认值决定。
-  // 注意与 context_window_k 区分：后者是模型总容量，只在本地用于压缩阈值。
+  // Output limit per reply (tokens). 0 = field not sent, server default decides.
+  // Note the difference from context_window_k: the latter is the model's total capacity and is only used locally for the compaction threshold.
   max_tokens?: number;
-  // 上限用哪个请求字段名，仅 format="openai" 有意义：
-  // ""=max_tokens(默认) | "max_completion_tokens"(OpenAI 推理模型只认它)
+  // Which request field name carries the limit; only meaningful for format="openai":
+  // "" = max_tokens (default) | "max_completion_tokens" (the only one OpenAI reasoning models accept)
   max_tokens_field?: string;
-  // 自定义会话头名：非空时每次请求带该 HTTP 头，头值=当前会话/意图的 session id。
-  // ""=不发送。用于按 session-id 头做提示缓存/粘性路由的网关。
+  // Custom session header name: when non-empty, every request carries this HTTP header whose value is the current session/intent session id.
+  // "" = not sent. For gateways that do prompt caching / sticky routing by session-id header.
   session_header_key?: string;
 }
 
-// ---- LLM 轮询（故障转移）----
-// 一个配置在轮询链中的位置与健康状态。state:
-//   ok       正常
-//   degraded 有连续失败但未达熔断阈值
-//   tripped  已熔断，冷却期内被跳过（cooldown_secs 为剩余秒数）
+// ---- LLM round-robin (failover)----
+// A profile's position and health state in the round-robin chain. state:
+//   ok       healthy
+//   degraded has consecutive failures but has not reached the circuit-breaker threshold
+//   tripped  circuit broken, skipped during cooldown (cooldown_secs is the remaining seconds)
 export interface LLMPoolMember {
   profile_id: string;
   name: string;
   model: string;
   format: string;
   priority: number;
-  active: boolean; // 是否为当前激活配置（恒为链首）
-  excluded: boolean; // pool_exclude：不参与轮询
+  active: boolean; // whether this is the currently active profile (always first in the chain)
+  excluded: boolean; // pool_exclude: does not participate in round-robin
   state: "ok" | "degraded" | "tripped";
   fails: number;
   trips: number;
@@ -948,22 +948,22 @@ export interface LLMPoolStatus {
 // ---- Agents ----
 export interface Agent {
   id: string;
-  key: string; // 内置为 goals/planner/mainagent/worker；自定义为用户自定 key
+  key: string; // built-in ones are goals/planner/mainagent/worker; custom ones use a user-defined key
   name: string;
   description?: string;
   role: string;
   builtin: boolean;
   enabled: boolean;
-  llm_profile_id?: number | null; // 绑定的 LLM 配置；null/absent = 跟随任务/会话/全局
-  max_turns?: number; // 0 = 无限制
-  run_seconds?: number; // worker 单次运行墙钟上限(秒)；0 = 无限制
-  web_search?: boolean; // 是否启用网络搜索(受系统全局开关门控)
-  interactive_shell?: boolean; // 是否启用交互式 shell(持久 PTY 会话工具族)
-  // P3 触发后处理策略(仅自定义 agent 有意义)
-  trigger_run_mode?: "serial" | "parallel"; // 串行排队 / 每次触发各自并发一个会话
-  trigger_merge_mode?: "by_task" | "all" | "none"; // 仅 serial：同任务合并 / 全部合并 / 不合并
-  trigger_max_parallel?: number; // 仅 parallel：每 agent 并发上限；0=不限
-  // 绑定数量(仅列表接口返回)：可见 MCP / 可见 Skill / 绑定工具
+  llm_profile_id?: number | null; // bound LLM profile; null/absent = follow task/session/global
+  max_turns?: number; // 0 = unlimited
+  run_seconds?: number; // worker per-run wall-clock limit (seconds); 0 = unlimited
+  web_search?: boolean; // whether web search is enabled (gated by the global system switch)
+  interactive_shell?: boolean; // whether the interactive shell is enabled (persistent PTY session tool family)
+  // P3 post-trigger handling policy (only meaningful for custom agents)
+  trigger_run_mode?: "serial" | "parallel"; // serial queue / each trigger runs its own concurrent session
+  trigger_merge_mode?: "by_task" | "all" | "none"; // serial only: merge per task / merge all / no merging
+  trigger_max_parallel?: number; // parallel only: per-agent concurrency limit; 0 = unlimited
+  // Binding counts (only returned by the list endpoint): visible MCP / visible Skill / bound tools
   mcp_count?: number;
   skill_count?: number;
   tool_count?: number;
@@ -989,13 +989,13 @@ export interface AgentDetail {
   variables: PromptVar[];
   versions: PromptVersion[];
   visibility: { mcp: number[]; skill: string[] };
-  // 可绑定的 LLM 配置候选(供「默认模型」下拉)；当前绑定见 agent.llm_profile_id
+  // Candidate LLM profiles that can be bound (for the "default model" dropdown); the current binding is in agent.llm_profile_id
   llm_profiles?: { id: number; name: string; model: string; is_default: boolean }[];
-  wrapup_prompt?: string; // 已保存的收尾提示词(空=用内置默认)
-  wrapup_default?: string; // 内置默认收尾提示词(占位/恢复默认)
-  wrapup_max_turns?: number; // 已保存的收尾轮数(0=用内置默认)
-  wrapup_max_turns_default?: number; // 内置默认收尾轮数(供 "0=默认N" 提示)
-  // 任务级超时收尾词(仅 worker/planner，task_timeout_wrapup_supported=true 时才显示该分区)
+  wrapup_prompt?: string; // saved wrap-up prompt (empty = use built-in default)
+  wrapup_default?: string; // built-in default wrap-up prompt (placeholder / restore default)
+  wrapup_max_turns?: number; // saved wrap-up turn count (0 = use built-in default)
+  wrapup_max_turns_default?: number; // built-in default wrap-up turn count (for the "0 = default N" hint)
+  // Task-level timeout wrap-up prompt (worker/planner only; the section is shown only when task_timeout_wrapup_supported=true)
   task_timeout_wrapup_supported?: boolean;
   task_timeout_wrapup_prompt?: string;
   task_timeout_wrapup_default?: string;
@@ -1031,23 +1031,23 @@ export interface SkillItem {
   compatibility?: string; // optional: environment requirements
   mcps?: string[]; // MCP server names this skill unlocks on load
   files: string[]; // files in the skill directory
-  // 调用统计（skill_usage 账本）。从未被调用过的 skill：calls=0、last_used 缺省。
+  // Call statistics (skill_usage ledger). A skill that was never called: calls=0, last_used omitted.
   calls: number;
-  tasks: number; // 加载过它的任务数（chat 会话不计入）
-  usage_agents: string[]; // 加载过它的 agent key
+  tasks: number; // number of tasks that loaded it (chat sessions not counted)
+  usage_agents: string[]; // keys of agents that loaded it
   last_used?: string;
 }
 
-// SkillCall 是一次 Skill() 调用（单个 skill 的最近调用列表）。
+// SkillCall is one Skill() call (the recent-call list of a single skill).
 export interface SkillCall {
   ts: string;
   agent_key: string;
-  task_id: number; // 0 = 非任务场景（对话会话）
+  task_id: number; // 0 = non-task scenario (chat session)
   session_id: string;
   args_len: number;
 }
 
-// MissingSkill 是被点名但不存在的 skill —— "想用但没有"的缺口。
+// MissingSkill is a skill that was named but does not exist - the "wanted but missing" gap.
 export interface MissingSkill {
   skill: string;
   calls: number;
@@ -1055,7 +1055,7 @@ export interface MissingSkill {
   last_used?: string;
 }
 
-// ---- Tools (内置工具目录) ----
+// ---- Tools (built-in tool catalog) ----
 // key + handler live in Go; only these fields are page-editable. system tools lock
 // the key and the parameter *structure* (name/type/required) — the per-param
 // description/default and the agent binding are what move.
@@ -1067,10 +1067,10 @@ export interface Tool {
   schema: Record<string, any>; // full JSON-Schema (object with properties)
   agents: string[]; // bound agent keys
   enabled: boolean;
-  kind?: "builtin" | "shell" | "command" | "script" | "http"; // 自定义工具类型
+  kind?: "builtin" | "shell" | "command" | "script" | "http"; // custom tool type
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exec?: Record<string, any>; // 自定义工具执行规格(kind!=builtin)
-  deferred?: boolean; // schema 延迟(SearchExtraTools/ExecuteExtraTool)
+  exec?: Record<string, any>; // custom tool execution spec (kind!=builtin)
+  deferred?: boolean; // deferred schema (SearchExtraTools/ExecuteExtraTool)
   calls?: number; // persistent runtime invocation count (older APIs may omit it)
 }
 
@@ -1116,20 +1116,20 @@ export interface InterceptPending {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tool_input: Record<string, any>;
   status: "pending" | "allowed" | "denied" | "timeout";
-  reason: string; // 规则 message 或模型判定理由(模型判定带 [模型] 前缀)
+  reason: string; // rule message or model verdict reason (model verdicts carry a [model] prefix)
   decided_at?: string;
   created_at: string;
 }
 
-// JudgeConfig: 模型兜底审批(仅当没有任何拦截规则命中时由模型判断)的全局配置。
+// JudgeConfig: global config of the model fallback approval (the model judges only when no interception rule matched)。
 export interface JudgeConfig {
   enabled: boolean;
-  profile_id: number; // 0 = 跟随激活/默认配置
-  prompt: string; // 判定提示词;GET 未设置时后端回填内置模板全文
-  timeout_seconds: number; // 模型调用超时
-  fail_action: "allow" | "ask" | "deny"; // 模型出错/超时/不可解析时的回退
-  ask_timeout_seconds: number; // 模型判 ask 转人工后的审批等待超时
-  ask_timeout_action: "allow" | "deny"; // 审批超时后的默认动作
+  profile_id: number; // 0 = follow the active/default profile
+  prompt: string; // judging prompt; when unset, GET makes the backend backfill the full built-in template
+  timeout_seconds: number; // model call timeout
+  fail_action: "allow" | "ask" | "deny"; // fallback when the model errors / times out / is unparsable
+  ask_timeout_seconds: number; // approval wait timeout after the model judges ask and hands off to a human
+  ask_timeout_action: "allow" | "deny"; // default action after approval timeout
 }
 
 // InterceptApprovalRow enriches InterceptPending with conversation/task and rule context.
@@ -1139,7 +1139,7 @@ export interface InterceptApprovalRow extends InterceptPending {
   rule_name: string; // "" if rule was deleted
 }
 
-// ── 资产同步 (ScopeSentry 数据源) ──────────────────────────────────────────────
+// ── Asset sync (ScopeSentry data source) ──────────────────────────────────────────────
 export interface SSProject {
   id: string; // MongoDB ObjectID — used as filter.project
   name: string;
@@ -1180,7 +1180,7 @@ export interface CommandRecord {
   created_at: string;
 }
 
-// 单个工具的调用统计（/commands/stats）；errors 为其中失败的次数。
+// Call statistics of a single tool (/commands/stats); errors is the number of failed calls.
 export interface ToolStat {
   tool: string;
   total: number;
@@ -1208,9 +1208,9 @@ export interface LLMRecordItem {
 export interface LLMRecordDetail extends LLMRecordItem {
   request_body: string;
   response_body: string;
-  // provider 实际收发的 HTTP 原文：请求为 buildBody() 发出的完整 body（含工具
-  // schema），响应为原始 SSE 帧。上面的 request_body/response_body 是归一化视图，
-  // 丢弃了工具 schema 与 tool_use 块。旧记录为空。
+  // Raw HTTP exchanged with the provider: the request is the full body sent by buildBody() (including tool
+  // schema), and the response is raw SSE frames. request_body/response_body above are the normalized view,
+  // which drops the tool schema and tool_use blocks. Empty for old records.
   raw_request?: string;
   raw_response?: string;
 }

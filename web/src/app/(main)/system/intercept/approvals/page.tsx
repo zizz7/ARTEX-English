@@ -29,7 +29,7 @@ function SourceCell({ row }: { row: InterceptApprovalRow }) {
   }
   if (row.conversation_id) {
     const agent = row.conv_agent_key || "—";
-    const title = row.conv_title || `对话 #${row.conversation_id}`;
+    const title = row.conv_title || `Conversation #${row.conversation_id}`;
     return (
       <div className="space-y-0.5">
         <div className="font-medium">{title}</div>
@@ -40,12 +40,12 @@ function SourceCell({ row }: { row: InterceptApprovalRow }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-// MatchCell shows the matched rule name, or a "模型判定" badge when the decision
+// MatchCell shows the matched rule name, or a "Model decision" badge when the decision
 // came from the LLM fallback judge (rule_id null). The reason (rule message or
-// model rationale, minus the [模型] prefix) is shown beneath.
+// model rationale, minus the [Model] prefix) is shown beneath.
 function MatchCell({ row }: { row: InterceptApprovalRow }) {
   const isModel = !row.rule_id;
-  const reason = row.reason?.replace(/^\[模型\]\s*/, "").trim();
+  const reason = row.reason?.replace(/^\[(Model|模型)\]\s*/, "").trim();
   return (
     <div className="space-y-0.5">
       {row.rule_name ? (
@@ -53,7 +53,7 @@ function MatchCell({ row }: { row: InterceptApprovalRow }) {
       ) : isModel ? (
         <Badge variant="outline" className="gap-1 border-violet-400 text-violet-600">
           <BotIcon className="h-3 w-3" />
-          模型判定
+          Model decision
         </Badge>
       ) : (
         <span className="text-muted-foreground">—</span>
@@ -68,10 +68,10 @@ function MatchCell({ row }: { row: InterceptApprovalRow }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "pending") return <Badge variant="outline" className="border-amber-400 text-amber-600">待审批</Badge>;
-  if (status === "allowed") return <Badge variant="outline" className="border-emerald-500 text-emerald-600">已允许</Badge>;
-  if (status === "denied")  return <Badge variant="outline" className="border-red-500 text-red-600">已拒绝</Badge>;
-  return <Badge variant="outline" className="text-muted-foreground">已超时</Badge>;
+  if (status === "pending") return <Badge variant="outline" className="border-amber-400 text-amber-600">Pending</Badge>;
+  if (status === "allowed") return <Badge variant="outline" className="border-emerald-500 text-emerald-600">Allowed</Badge>;
+  if (status === "denied")  return <Badge variant="outline" className="border-red-500 text-red-600">Denied</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground">Timed out</Badge>;
 }
 
 function InputPreview({ input }: { input: Record<string, unknown> }) {
@@ -121,7 +121,7 @@ export default function ApprovalsPage() {
     setDeciding(id);
     try {
       await api.interceptDecide(id, decision);
-      toast.success(decision === "allowed" ? "已允许执行" : "已拒绝执行");
+      toast.success(decision === "allowed" ? "Execution allowed" : "Execution denied");
       setRows((prev) =>
         prev.map((r) =>
           r.id === id ? { ...r, status: decision, decided_at: new Date().toISOString() } : r,
@@ -144,14 +144,14 @@ export default function ApprovalsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ClipboardListIcon className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-xl font-semibold">审批记录</h1>
+          <h1 className="text-xl font-semibold">Approval Records</h1>
           {pending.length > 0 && (
-            <Badge className="rounded-full bg-destructive text-destructive-foreground">{pending.length} 待审批</Badge>
+            <Badge className="rounded-full bg-destructive text-destructive-foreground">{pending.length} pending</Badge>
           )}
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCwIcon className="mr-1.5 h-3.5 w-3.5" />
-          刷新
+          Refresh
         </Button>
       </div>
 
@@ -160,18 +160,18 @@ export default function ApprovalsPage() {
         <section className="rounded-lg border border-amber-400/40 bg-amber-50/30 dark:bg-amber-950/10">
           <div className="flex items-center gap-2 border-b border-amber-400/30 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-400">
             <ShieldAlertIcon className="h-4 w-4" />
-            待处理 ({pending.length})
+            Pending ({pending.length})
           </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
-                <TableHead>工具</TableHead>
-                <TableHead>来源</TableHead>
-                <TableHead>匹配规则</TableHead>
-                <TableHead className="w-48">参数</TableHead>
-                <TableHead>时间</TableHead>
-                <TableHead className="w-28 text-right">操作</TableHead>
+                <TableHead>Tool</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Matched rule</TableHead>
+                <TableHead className="w-48">Arguments</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead className="w-28 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -194,7 +194,7 @@ export default function ApprovalsPage() {
                         onClick={() => decide(row.id, "allowed")}
                       >
                         <CheckIcon className="mr-1 h-3 w-3" />
-                        允许
+                        Allow
                       </Button>
                       <Button
                         size="sm"
@@ -204,7 +204,7 @@ export default function ApprovalsPage() {
                         onClick={() => decide(row.id, "denied")}
                       >
                         <XIcon className="mr-1 h-3 w-3" />
-                        拒绝
+                        Deny
                       </Button>
                     </div>
                   </TableCell>
@@ -218,22 +218,22 @@ export default function ApprovalsPage() {
       {/* history section */}
       <section className="rounded-lg border">
         <div className="border-b px-4 py-3 text-sm font-medium text-muted-foreground">
-          全部记录 ({rows.length})
+          All records ({rows.length})
         </div>
         {rows.length === 0 && !loading ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">暂无审批记录</div>
+          <div className="py-16 text-center text-sm text-muted-foreground">No approval records</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
-                <TableHead>工具</TableHead>
-                <TableHead>来源</TableHead>
-                <TableHead>匹配规则</TableHead>
-                <TableHead className="w-48">参数</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>申请时间</TableHead>
-                <TableHead>决定时间</TableHead>
+                <TableHead>Tool</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Matched rule</TableHead>
+                <TableHead className="w-48">Arguments</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Requested at</TableHead>
+                <TableHead>Decided at</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
