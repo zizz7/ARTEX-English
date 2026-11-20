@@ -133,12 +133,15 @@ func FromEnv() (Config, bool) {
 	prov := os.Getenv("ARTEX_LLM_PROVIDER")
 	anthKey := os.Getenv("ANTHROPIC_API_KEY")
 	oaiKey := os.Getenv("OPENAI_API_KEY")
+	explabsKey := os.Getenv("EXPLABS_API_KEY")
 
 	if prov == "" {
 		switch {
 		case anthKey != "":
 			prov = "anthropic"
 		case oaiKey != "":
+			prov = "openai"
+		case explabsKey != "":
 			prov = "openai"
 		default:
 			return Config{}, false
@@ -156,12 +159,18 @@ func FromEnv() (Config, bool) {
 	case "openai":
 		c.Format = llm.FormatOpenAI
 		c.APIKey = oaiKey
+		if c.APIKey == "" {
+			c.APIKey = explabsKey
+		}
 		if c.Model == "" {
 			c.Model = "gpt-4o"
 		}
 	case "openai-responses":
 		c.Format = llm.FormatOpenAIResponses
 		c.APIKey = oaiKey
+		if c.APIKey == "" {
+			c.APIKey = explabsKey
+		}
 		if c.Model == "" {
 			c.Model = "gpt-5"
 		}

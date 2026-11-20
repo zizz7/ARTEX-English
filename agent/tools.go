@@ -350,6 +350,9 @@ func (t *ToolSet) graphOverview() actool.CoreTool {
 		"(Exploration graph) Distilled situational summary: asset counts, sites without interfaces, frontier, findings, hints (strategic guidance from humans/main agent — must be considered when generating intents). Call this first when planning.",
 		obj(map[string]any{}),
 		func(context.Context, json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("graph_overview requires task context (exploration store not initialized)"), nil
+			}
 			return jsonResult(t.graphOverviewData())
 		})
 }
@@ -884,6 +887,9 @@ func (t *ToolSet) listFindings() actool.CoreTool {
 	return readTool("list_findings", "List confirmed vulnerabilities for this task and directly related tasks (compact: id+task_id+intent_id+vulnclass+severity+summary+state). Related task entries carry source_task_id/inherited=true and are read-only. This only contains vulnerabilities; for general exploration facts use list_facts, for details use node_detail(id).",
 		obj(map[string]any{}),
 		func(context.Context, json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("list_findings requires task context (exploration store not initialized); run this agent inside a task, not a standalone chat"), nil
+			}
 			f, _ := t.ts.ListByKindWithSources(db.KindFinding, 500)
 			intentOf, _ := t.ts.FindingIntentsWithSources() // finding id -> the intent that produced it
 			taskID := t.taskID
@@ -920,6 +926,9 @@ func (t *ToolSet) listFacts() actool.CoreTool {
 			"q":      str("Filter by fact summary keyword (case-insensitive); omit = no filter"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("list_facts requires task context (exploration store not initialized)"), nil
+			}
 			var a struct {
 				Limit  int    `json:"limit"`
 				Before int64  `json:"before"`
@@ -969,6 +978,9 @@ func (t *ToolSet) nodeDetail() actool.CoreTool {
 	return readTool("node_detail", "Retrieve the full content of an exploration graph node by id, for this task or directly related tasks. Inherited nodes carry source_task_id/inherited=true and are read-only. Only accepts exploration node ids returned by list_facts/list_findings/graph_overview; for assets use list_assets/asset_neighbors.",
 		obj(map[string]any{"id": idp("Exploration graph node id (not an asset id)")}, "id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("node_detail requires task context (exploration store not initialized)"), nil
+			}
 			var a struct {
 				ID json.RawMessage `json:"id"`
 			}
@@ -1059,6 +1071,9 @@ func (t *ToolSet) addIntent() actool.CoreTool {
 			"priority":   intp("Priority 0-10, default 5"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("add_intent requires task context"), nil
+			}
 			var a struct {
 				Intents    []intentItem `json:"intents"`
 				intentItem              // single-item mode: top-level summary/asset_ids/parent_ids/priority
@@ -1111,6 +1126,9 @@ func (t *ToolSet) listGoals() actool.CoreTool {
 	return readTool("list_goals", "List this task's goal nodes and their states (open/met), for checking whether they have been achieved.",
 		obj(map[string]any{}),
 		func(context.Context, json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("list_goals requires task context (exploration store not initialized)"), nil
+			}
 			g, _ := t.ts.ListByKind(db.KindGoal, 100)
 			return jsonResult(g)
 		})
@@ -1124,6 +1142,9 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 			"reason":      str("Why this evidence satisfies the goal"),
 		}, "goal_id", "evidence_id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("prove_goal requires task context"), nil
+			}
 			var a struct {
 				GoalID     json.RawMessage `json:"goal_id"`
 				EvidenceID json.RawMessage `json:"evidence_id"`
@@ -1205,6 +1226,9 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 				AssetIDs                                     []json.RawMessage `json:"asset_ids"`
 			}
 			_ = json.Unmarshal(in, &a)
+			if t.ts == nil {
+				return actool.Errorf("report_finding requires task context"), nil
+			}
 			a.Severity = strings.ToLower(strings.TrimSpace(a.Severity))
 			if !db.ValidSeverity(a.Severity) {
 				return actool.Errorf(fmt.Sprintf("severity must be one of critical|high|medium|low (got %q); informational observations belong in record_fact", a.Severity)), nil
@@ -1333,6 +1357,9 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Related asset ids (optional, 0/1/multiple): which assets this fact pertains to"},
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if t.ts == nil {
+				return actool.Errorf("record_fact requires task context"), nil
+			}
 			var a struct {
 				Facts    []factItem `json:"facts"`
 				factItem            // single-item mode + batch default intent_id

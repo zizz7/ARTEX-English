@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	actool "github.com/Autumn-27/norma/tool"
@@ -33,16 +34,26 @@ func meterTool(t actool.CoreTool, recorder toolUsageRecorder, toolKey, agentKey 
 	return &meteredTool{CoreTool: t, recorder: recorder, toolKey: toolKey, agentKey: agentKey, ri: ri}
 }
 
-func (m *meteredTool) Call(ctx context.Context, input json.RawMessage, tc *actool.ToolContext) (actool.Result, error) {
-	if err := m.recorder.InsertToolUsage(&db.ToolUsage{
+func (m *meteredTool) Call(ctx context.Context, input json.RawMessage, tc *actool.ToolContext) (result actool.Result, err error) {
+	if ierr := m.recorder.InsertToolUsage(&db.ToolUsage{
 		ToolKey:       m.toolKey,
 		AgentKey:      m.agentKey,
 		TaskID:        m.ri.TaskID,
 		ExplorationID: m.ri.ExplorationID,
 		IntentID:      m.ri.IntentID,
 		SessionID:     m.ri.SessionID,
-	}); err != nil {
-		log.Printf("[toolusage] insert %s: %v", m.toolKey, err)
+	}); ierr != nil {
+		log.Printf("[toolusage] insert %s: %v", m.toolKey, ierr)
 	}
+	// A tool panic (e.g. a task-scoped tool invoked in a context without an
+	// exploration store) must not take down the whole process — norma does not
+	// recover tool panics. Convert it into a tool error the agent can handle.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[tool] panic in %s recovered: %v", m.toolKey, r)
+			result = actool.Errorf(fmt.Sprintf("tool %s failed with an internal error: %v", m.toolKey, r))
+			err = nil
+		}
+	}()
 	return m.CoreTool.Call(ctx, input, tc)
 }
