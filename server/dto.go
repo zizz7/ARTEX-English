@@ -590,6 +590,8 @@ type LLMProfileDTO struct {
 	// Custom session header name: when non-empty every request carries this HTTP header, value = current session/intent session id.
 	// ''=not sent. For gateways that do prompt caching/sticky routing by the session-id header.
 	SessionHeaderKey string `json:"session_header_key"`
+	// Max calls in flight at once on this endpoint+model+key across all agents; 0 = unlimited.
+	MaxConcurrency int `json:"max_concurrency"`
 }
 
 func llmProfileDTO(p *db.LLMProfile) LLMProfileDTO {
@@ -613,6 +615,7 @@ func llmProfileDTO(p *db.LLMProfile) LLMProfileDTO {
 		MaxTokens:        p.MaxTokens,
 		MaxTokensField:   p.MaxTokensField,
 		SessionHeaderKey: p.SessionHeaderKey,
+		MaxConcurrency:   p.MaxConcurrency,
 	}
 }
 

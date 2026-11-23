@@ -355,6 +355,11 @@ ALTER TABLE llm_profiles ADD  CONSTRAINT llm_profiles_max_tokens_check
     CHECK (max_tokens >= 0);
 -- Custom session header name; backfills older databases. Default '' = not sent, behavior of old configs unchanged.
 ALTER TABLE llm_profiles ADD COLUMN IF NOT EXISTS session_header_key TEXT NOT NULL DEFAULT '';
+-- Max calls in flight at once for this profile's endpoint+model+key, across every agent. 0 = unlimited.
+ALTER TABLE llm_profiles ADD COLUMN IF NOT EXISTS max_concurrency INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE llm_profiles DROP CONSTRAINT IF EXISTS llm_profiles_max_concurrency_check;
+ALTER TABLE llm_profiles ADD  CONSTRAINT llm_profiles_max_concurrency_check
+    CHECK (max_concurrency >= 0);
 
 -- Thinking switch column thinking_type, split out in one go from the old single reasoning_effort semantics.
 -- schema.sql is executed on every startup, so the migration must run only once: backfill only when the column does not yet exist,

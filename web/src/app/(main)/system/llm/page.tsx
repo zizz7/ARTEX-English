@@ -316,6 +316,7 @@ function ProfileSheet({
   const [keyHint, setKeyHint] = React.useState("");
   const [rps, setRps] = React.useState("0");
   const [rpm, setRpm] = React.useState("0");
+  const [maxConc, setMaxConc] = React.useState("0"); // max calls in flight at once; 0 = unlimited
   const [cw, setCw] = React.useState("0"); // context window (K tokens); 0 = default 200K
   const [thinkingType, setThinkingType] = React.useState(NONE);
   const [effort, setEffort] = React.useState(NONE);
@@ -344,6 +345,7 @@ function ProfileSheet({
     setProxy(profile?.proxy ?? "");
     setRps(String(profile?.rate_per_second ?? 0));
     setRpm(String(profile?.rate_per_minute ?? 0));
+    setMaxConc(String(profile?.max_concurrency ?? 0));
     setCw(String(profile?.context_window_k ?? 0));
     setThinkingType(fromStore(profile?.thinking_type));
     setEffort(fromStore(profile?.reasoning_effort));
@@ -429,6 +431,7 @@ function ProfileSheet({
         api_key: apiKey,
         rate_per_second: Number(rps) || 0,
         rate_per_minute: Number(rpm) || 0,
+        max_concurrency: Math.max(0, Math.floor(Number(maxConc) || 0)),
         context_window_k: Number(cw) || 0,
         thinking_type: toStore(thinkingType),
         reasoning_effort: toStore(effort),
@@ -626,6 +629,22 @@ function ProfileSheet({
             Rate limit 0 = unlimited, shared across all Agents. Context window is in K (thousand tokens), 0 = default 200K, max 1000 (i.e.
             1M); setting it too high prevents compaction from triggering.
           </p>
+
+          <div className="grid gap-2">
+            <Label htmlFor="p-maxconc">Max parallel calls</Label>
+            <Input
+              id="p-maxconc"
+              type="number"
+              min={0}
+              step={1}
+              value={maxConc}
+              onChange={(e) => setMaxConc(e.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              How many requests to this endpoint + model + key may be in flight at once, across every task, worker, planner and
+              chat. Extra calls wait for a free slot instead of hitting the provider&apos;s concurrency limit. 0 = unlimited.
+            </p>
+          </div>
 
           <div className="grid gap-3 rounded-lg border p-3">
             <div className="flex items-center justify-between gap-4">
@@ -917,6 +936,7 @@ export default function LLMPage() {
                   <span>
                     {p.rate_per_second}/s · {p.rate_per_minute}/min
                   </span>
+                  {(p.max_concurrency ?? 0) > 0 && <span>Max {p.max_concurrency} parallel</span>}
                   {p.proxy && <span className="truncate">Proxy {p.proxy}</span>}
                   {p.reasoning_effort && <span>Thinking {p.reasoning_effort === "off" ? "off" : p.reasoning_effort}</span>}
                   {/* The two pool-related fields are only meaningful while the pool is on; they take no space when it is off */}

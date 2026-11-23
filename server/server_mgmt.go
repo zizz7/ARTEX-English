@@ -1811,6 +1811,9 @@ func (s *Server) pgSaveProfile(w http.ResponseWriter, r *http.Request) {
 	if p.MaxTokens < 0 {
 		p.MaxTokens = 0
 	}
+	if p.MaxConcurrency < 0 {
+		p.MaxConcurrency = 0
+	}
 	if p.Format != "openai" || p.MaxTokensField != llm.MaxTokensFieldCompletion {
 		p.MaxTokensField = ""
 	}

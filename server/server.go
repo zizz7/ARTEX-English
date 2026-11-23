@@ -314,6 +314,7 @@ func (s *Server) loadLLMConfig() (agent.Config, bool) {
 	cfg.Stream = p.Streaming
 	cfg.MaxTokens, cfg.MaxTokensField = p.MaxTokens, p.MaxTokensField
 	cfg.SessionHeaderKey = p.SessionHeaderKey
+	cfg.MaxConcurrency = p.MaxConcurrency
 	if cfg.APIKey == "" {
 		return cfg, false
 	}
@@ -338,12 +339,14 @@ func (s *Server) saveLLMConfig(cfg agent.Config) error {
 	var maxTokens int
 	var maxTokensField string
 	var sessionHeaderKey string
+	var maxConcurrency int
 	if profs, _ := s.m.pg.ListProfiles(); profs != nil {
 		for _, p := range profs {
 			if p.Name == "default" {
 				id, priority, poolExclude, streaming = p.ID, p.Priority, p.PoolExclude, p.Streaming
 				maxTokens, maxTokensField = p.MaxTokens, p.MaxTokensField
 				sessionHeaderKey = p.SessionHeaderKey
+				maxConcurrency = p.MaxConcurrency
 				break
 			}
 		}
@@ -354,6 +357,7 @@ func (s *Server) saveLLMConfig(cfg agent.Config) error {
 		ContextWindowK: cfg.ContextWindowK, ThinkingType: cfg.ThinkingType, ReasoningEffort: cfg.ReasoningEffort, IsDefault: true,
 		Priority: priority, PoolExclude: poolExclude, Streaming: streaming,
 		MaxTokens: maxTokens, MaxTokensField: maxTokensField, SessionHeaderKey: sessionHeaderKey,
+		MaxConcurrency: maxConcurrency,
 	})
 	if err != nil {
 		return err
@@ -512,6 +516,7 @@ func (s *Server) loadProfileConfig(id int64) (agent.Config, bool) {
 	cfg.Stream = p.Streaming
 	cfg.MaxTokens, cfg.MaxTokensField = p.MaxTokens, p.MaxTokensField
 	cfg.SessionHeaderKey = p.SessionHeaderKey
+	cfg.MaxConcurrency = p.MaxConcurrency
 	if cfg.APIKey == "" {
 		return cfg, false
 	}

@@ -84,6 +84,9 @@ type Config struct {
 	// transcript.WithSessionID and read by the RoundTripper, so even a shared
 	// provider can send different header values per session.
 	SessionHeaderKey string
+	// MaxConcurrency caps calls in flight at once on this endpoint+model+key across
+	// every provider built from it (0 = unlimited). Extra calls wait for a slot.
+	MaxConcurrency int
 }
 
 // compaction window resolution bounds (in K tokens). Below the floor the
@@ -273,7 +276,11 @@ func (c Config) NewProvider() (llm.Provider, error) {
 	if c.RatePerSecond > 0 || c.RatePerMinute > 0 {
 		lc.RateLimit = &llm.RateLimit{PerSecond: c.RatePerSecond, PerMinute: c.RatePerMinute}
 	}
-	return llm.NewProvider(lc)
+	prov, err := llm.NewProvider(lc)
+	if err != nil || c.MaxConcurrency <= 0 {
+		return prov, err
+	}
+	return limitConcurrency(prov, slotPool(c.BaseURL, c.Model, c.APIKey, c.MaxConcurrency)), nil
 }
 
 // IsQuotaExhaustedMessage deliberately recognizes only explicit balance,

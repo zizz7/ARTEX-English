@@ -81,19 +81,29 @@ type Client struct {
 	headers map[string]string
 	http    *http.Client
 
+	// rotHeader/ring hold alternative credentials for one header (see KeySeparator).
+	rotHeader string
+	ring      *keyRing
+
 	mu        sync.Mutex
 	nextID    int
 	sessionID string
 }
 
 // New connects to a remote MCP endpoint and performs the initialize handshake.
-// headers are sent on every request (Authorization, custom API keys, …).
+// headers are sent on every request (Authorization, custom API keys, …). A header
+// value holding several credentials separated by KeySeparator rotates through them.
 func New(ctx context.Context, server, url string, headers map[string]string) (*Client, error) {
+	static, rotHeader, keys := splitRotatingHeader(headers)
 	c := &Client{
 		server:  server,
 		url:     url,
-		headers: headers,
+		headers: static,
 		http:    &http.Client{}, // per-request deadlines come from the call's context
+	}
+	if rotHeader != "" {
+		c.rotHeader = rotHeader
+		c.ring = ringFor(server, url, rotHeader, keys)
 	}
 	ictx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
@@ -231,9 +241,7 @@ func (c *Client) Close() error {
 		return nil
 	}
 	req.Header.Set("Mcp-Session-Id", sid)
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
+	c.setHeaders(req, c.currentKey())
 	if resp, err := c.http.Do(req); err == nil {
 		resp.Body.Close()
 	}
@@ -265,24 +273,67 @@ func (c *Client) notify(ctx context.Context, method string, params any) error {
 	return err
 }
 
-// roundTrip POSTs one JSON-RPC frame. When expectResp is false (a notification) the
-// server replies 202 Accepted with no body. Otherwise the reply is parsed from JSON
-// or from an SSE stream, whichever the server chose.
+func (c *Client) currentKey() string {
+	if c.ring == nil {
+		return ""
+	}
+	_, key := c.ring.pick(time.Now())
+	return key
+}
+
+func (c *Client) setHeaders(req *http.Request, key string) {
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
+	if c.ring != nil {
+		req.Header.Set(c.rotHeader, key)
+	}
+}
+
+// roundTrip sends one JSON-RPC frame. When the server refuses the current
+// credential (401/402/403/429) and another one is usable, it switches to it,
+// opens a fresh session under it, and retries.
 func (c *Client) roundTrip(ctx context.Context, body rpcRequest, expectResp bool) (*rpcResponse, error) {
+	for attempt := 0; ; attempt++ {
+		idx, key := -1, ""
+		if c.ring != nil {
+			idx, key = c.ring.pick(time.Now())
+		}
+		resp, status, err := c.roundTripOnce(ctx, body, expectResp, key)
+		if c.ring == nil || !rotatable(status) || attempt >= len(c.ring.keys)-1 {
+			return resp, err
+		}
+		if !c.ring.markSpent(idx, status, time.Now()) {
+			return resp, err
+		}
+		c.mu.Lock()
+		c.sessionID = ""
+		c.mu.Unlock()
+		if body.Method != "initialize" && body.Method != "notifications/initialized" {
+			if ierr := c.initialize(ctx); ierr != nil {
+				return nil, ierr
+			}
+		}
+	}
+}
+
+// roundTripOnce POSTs one JSON-RPC frame with the given rotating credential. When
+// expectResp is false (a notification) the server replies 202 Accepted with no
+// body. Otherwise the reply is parsed from JSON or from an SSE stream, whichever
+// the server chose. status is the HTTP status of a non-2xx reply, else 0.
+func (c *Client) roundTripOnce(ctx context.Context, body rpcRequest, expectResp bool, key string) (*rpcResponse, int, error) {
 	data, err := json.Marshal(body)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", protocolVersion)
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
+	c.setHeaders(req, key)
 	c.mu.Lock()
 	sid := c.sessionID
 	c.mu.Unlock()
@@ -292,7 +343,7 @@ func (c *Client) roundTrip(ctx context.Context, body rpcRequest, expectResp bool
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
@@ -306,19 +357,20 @@ func (c *Client) roundTrip(ctx context.Context, body rpcRequest, expectResp bool
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("mcp http %d: %s", resp.StatusCode, readSnippet(resp.Body))
+		return nil, resp.StatusCode, fmt.Errorf("mcp http %d: %s", resp.StatusCode, readSnippet(resp.Body))
 	}
 	if !expectResp {
-		return nil, nil // notification — no JSON-RPC body to parse
+		return nil, 0, nil // notification — no JSON-RPC body to parse
 	}
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		return parseSSE(resp.Body, body.ID)
+		out, err := parseSSE(resp.Body, body.ID)
+		return out, 0, err
 	}
 	var out rpcResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, fmt.Errorf("mcp: decode json response: %w", err)
+		return nil, 0, fmt.Errorf("mcp: decode json response: %w", err)
 	}
-	return &out, nil
+	return &out, 0, nil
 }
 
 // parseSSE reads an SSE stream and returns the first data frame that is a JSON-RPC

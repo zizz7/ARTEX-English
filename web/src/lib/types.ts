@@ -916,6 +916,8 @@ export interface LLMProfile {
   // Custom session header name: when non-empty, every request carries this HTTP header whose value is the current session/intent session id.
   // "" = not sent. For gateways that do prompt caching / sticky routing by session-id header.
   session_header_key?: string;
+  // Max calls in flight at once on this endpoint+model+key across all agents; 0 = unlimited.
+  max_concurrency?: number;
 }
 
 // ---- LLM round-robin (failover)----
